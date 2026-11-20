@@ -6,6 +6,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.Intent;
+import android.net.Uri;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -23,6 +25,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Random;
@@ -41,6 +48,13 @@ public class MainActivity extends Activity {
 
     private String[] own = new String[0];
     private String[] hot = new String[0];
+    private String[] ownEn = new String[0];
+    private String[] hotEn = new String[0];
+    private String[] baseOwn = new String[0], baseOwnEn = new String[0];
+    private String[] baseHot = new String[0], baseHotEn = new String[0];
+    private String[] impOwn = new String[0], impOwnEn = new String[0];
+    private String[] impHot = new String[0], impHotEn = new String[0];
+    private static final int REQ_IMPORT = 1001;
     private int mode = 0;              // 0 原创 / 1 抖音热门
     private boolean randomMode = false; // false 默认（不重复） / true 纯随机
     private int lastOwn = -1, lastHot = -1;
@@ -50,6 +64,7 @@ public class MainActivity extends Activity {
 
     private TextView counter;
     private TextView body;
+    private TextView trans;
     private TextView source;
     private ScrollView scroll;
     private Button toggle;
@@ -72,8 +87,12 @@ public class MainActivity extends Activity {
         readSeen("seen_own", seenOwn);
         readSeen("seen_hot", seenHot);
 
-        own = load("quotes.txt");
-        hot = load("hot.txt");
+        baseOwn = load("quotes.txt");
+        baseHot = load("hot.txt");
+        baseOwnEn = load("quotes_en.txt");
+        baseHotEn = load("hot_en.txt");
+        reloadImported();
+        rebuildPools();
         buildUi();
         showNext();
     }
@@ -143,6 +162,227 @@ public class MainActivity extends Activity {
         return new RippleDrawable(ColorStateList.valueOf(color), content, null);
     }
 
+    private static String[] concat(String[] a, String[] b) {
+        String[] r = new String[a.length + b.length];
+        System.arraycopy(a, 0, r, 0, a.length);
+        System.arraycopy(b, 0, r, a.length, b.length);
+        return r;
+    }
+
+    private static String[] padTo(String[] en, int n) {
+        if (en.length >= n) return en;
+        String[] r = new String[n];
+        for (int i = 0; i < n; i++) r[i] = i < en.length ? en[i] : "";
+        return r;
+    }
+
+    private String readAll(InputStream in) throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+        return new String(bos.toByteArray(), "UTF-8");
+    }
+
+    private String[] loadCustom(String name) {
+        try {
+            File f = new File(getFilesDir(), name);
+            if (!f.exists()) return new String[0];
+            String all = readAll(new FileInputStream(f)).trim();
+            if (all.length() == 0) return new String[0];
+            return all.split(SEP);
+        } catch (Throwable t) {
+            return new String[0];
+        }
+    }
+
+    private void reloadImported() {
+        impOwn = loadCustom("custom_own.txt");
+        impOwnEn = padTo(loadCustom("custom_own_en.txt"), impOwn.length);
+        impHot = loadCustom("custom_hot.txt");
+        impHotEn = padTo(loadCustom("custom_hot_en.txt"), impHot.length);
+    }
+
+    private void rebuildPools() {
+        own = concat(baseOwn, impOwn);
+        ownEn = concat(baseOwnEn, impOwnEn);
+        hot = concat(baseHot, impHot);
+        hotEn = concat(baseHotEn, impHotEn);
+    }
+
+    private void writeCustom(String name, List<String> list) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) sb.append(SEP);
+            sb.append(list.get(i));
+        }
+        FileOutputStream out = new FileOutputStream(new File(getFilesDir(), name));
+        out.write(sb.toString().getBytes("UTF-8"));
+        out.close();
+    }
+
+    // 导入格式：每行一篇；空行与 # 开头忽略；可写「中文|English」，英文可省略
+    private void importFromUri(Uri uri) {
+        try {
+            InputStream in = getContentResolver().openInputStream(uri);
+            String all = readAll(in);
+            in.close();
+            List<String> zh = new ArrayList<String>();
+            List<String> en = new ArrayList<String>();
+            String[] lines = all.split("\r?\n");
+            for (int i = 0; i < lines.length; i++) {
+                String ln = lines[i].trim();
+                if (ln.length() == 0) continue;
+                if (ln.startsWith("#")) continue;
+                String z = ln, e = "";
+                int bar = ln.indexOf('|');
+                if (bar < 0) bar = ln.indexOf((char) 0xFF5C);
+                if (bar > 0) {
+                    z = ln.substring(0, bar).trim();
+                    e = ln.substring(bar + 1).trim();
+                }
+                if (z.length() < 4) continue;
+                zh.add(z);
+                en.add(e);
+            }
+            if (zh.isEmpty()) {
+                Toast.makeText(this, "没读到可用文案，看看导入格式说明", Toast.LENGTH_LONG).show();
+                return;
+            }
+            List<String> cz = new ArrayList<String>();
+            List<String> ce = new ArrayList<String>();
+            String[] srcZ = mode == 0 ? impOwn : impHot;
+            String[] srcE = mode == 0 ? impOwnEn : impHotEn;
+            for (int i = 0; i < srcZ.length; i++) {
+                cz.add(srcZ[i]);
+                ce.add(i < srcE.length ? srcE[i] : "");
+            }
+            Set<String> have = new HashSet<String>();
+            for (String z : own) have.add(z.trim());
+            for (String z : hot) have.add(z.trim());
+            int added = 0;
+            for (int i = 0; i < zh.size(); i++) {
+                String z = zh.get(i);
+                if (have.contains(z)) continue;
+                have.add(z);
+                cz.add(z);
+                ce.add(en.get(i));
+                added++;
+            }
+            if (added == 0) {
+                Toast.makeText(this, "这些文案已经在里面了", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (mode == 0) {
+                writeCustom("custom_own.txt", cz);
+                writeCustom("custom_own_en.txt", ce);
+            } else {
+                writeCustom("custom_hot.txt", cz);
+                writeCustom("custom_hot_en.txt", ce);
+            }
+            reloadImported();
+            rebuildPools();
+            showNext();
+            Toast.makeText(this, "已导入 " + added + " 条到" + (mode == 0 ? "原创池" : "热门池"),
+                    Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "导入失败：" + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IMPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            importFromUri(data.getData());
+        }
+    }
+
+    private void pickTxt() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("text/plain");
+            startActivityForResult(i, REQ_IMPORT);
+        } catch (Throwable t) {
+            try {
+                Intent i2 = new Intent(Intent.ACTION_GET_CONTENT);
+                i2.setType("text/plain");
+                startActivityForResult(i2, REQ_IMPORT);
+            } catch (Throwable t2) {
+                Toast.makeText(this, "这台设备没有可用的文件选择器", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private void showImportHelp() {
+        String NL = String.valueOf((char) 10);
+        String head = "导入你自己的 txt 到" + (mode == 0 ? "原创池" : "热门池") + "（当前这个池子）";
+        String l1 = "格式：一行一篇";
+        String l2 = "· 空行会被忽略";
+        String l3 = "· 以 # 开头的行是注释，也会忽略";
+        String l4 = "· 想带英文就写「中文|English」，竖线用英文或中文的都行";
+        String l5 = "· 不写英文也可以，英文那行会空着";
+        String l6 = "· 每篇 4 个字以上才会被收下";
+        String eg = "示例：";
+        String e1 = "# 我自己的文案";
+        String e2 = "你别再试探我了，我不会心软的。|Stop testing me. I will not soften.";
+        String e3 = "我的心是水泥做的，捂不热，也砸不碎。";
+        String tail = "重复的会被跳过；导入后接在池子末尾。";
+        StringBuilder sb = new StringBuilder();
+        sb.append(head).append(NL).append(NL);
+        sb.append(l1).append(NL);
+        sb.append(l2).append(NL).append(l3).append(NL);
+        sb.append(l4).append(NL).append(l5).append(NL).append(l6).append(NL).append(NL);
+        sb.append(eg).append(NL).append(e1).append(NL);
+        sb.append(e2).append(NL).append(e3).append(NL).append(NL).append(tail);
+        TextView tip = new TextView(this);
+        tip.setText(sb.toString());
+        tip.setTextColor(TEXT);
+        tip.setTextSize(13);
+        tip.setLineSpacing(dp(5), 1f);
+        tip.setPadding((int) dp(20), (int) dp(16), (int) dp(20), (int) dp(8));
+        TextView dlgTitle = new TextView(this);
+        dlgTitle.setText("导入 txt");
+        dlgTitle.setTextColor(TEXT);
+        dlgTitle.setTextSize(17);
+        dlgTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        dlgTitle.setPadding((int) dp(20), (int) dp(18), (int) dp(20), 0);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tip);
+
+        LinearLayout dlgBox = new LinearLayout(this);
+        dlgBox.setOrientation(LinearLayout.VERTICAL);
+        dlgBox.addView(dlgTitle);
+        dlgBox.addView(sv);
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(dlgBox)
+                .setPositiveButton("选择文件", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        pickTxt();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        styleDialog(dlg);
+    }
+
+    private void styleDialog(AlertDialog d) {
+        try {
+            if (d.getWindow() != null) {
+                d.getWindow().setBackgroundDrawable(new android.graphics.drawable.InsetDrawable(
+                        round(CARD, dp(18)), (int) dp(6)));
+            }
+            Button ok = d.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (ok != null) ok.setTextColor(ACCENT);
+            Button no = d.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (no != null) no.setTextColor(SUB);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -152,7 +392,7 @@ public class MainActivity extends Activity {
         LinearLayout headerRow = new LinearLayout(this);
         headerRow.setOrientation(LinearLayout.HORIZONTAL);
         headerRow.setGravity(Gravity.TOP);
-        headerRow.setPadding((int) dp(22), (int) dp(24), (int) dp(16), (int) dp(10));
+        headerRow.setPadding((int) dp(20), (int) dp(20), (int) dp(14), (int) dp(8));
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
@@ -160,9 +400,13 @@ public class MainActivity extends Activity {
         TextView title = new TextView(this);
         title.setText("每日一遍");
         title.setTextColor(TEXT);
-        title.setTextSize(26);
+        title.setTextSize(24);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        header.addView(title);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.addView(title);
+        header.addView(titleRow);
 
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.HORIZONTAL);
@@ -177,13 +421,15 @@ public class MainActivity extends Activity {
 
         counter = new TextView(this);
         counter.setTextColor(SUB);
-        counter.setTextSize(12);
+        counter.setTextSize(11);
+        counter.setSingleLine(true);
+        counter.setEllipsize(android.text.TextUtils.TruncateAt.END);
         meta.addView(counter);
         header.addView(meta);
 
         source = new TextView(this);
         source.setTextColor(SUB);
-        source.setTextSize(12);
+        source.setTextSize(11);
         source.setPadding(0, (int) dp(6), 0, 0);
         header.addView(source);
 
@@ -197,7 +443,7 @@ public class MainActivity extends Activity {
 
         modeBtn = new Button(this);
         modeBtn.setAllCaps(false);
-        modeBtn.setTextSize(12);
+        modeBtn.setTextSize(11);
         modeBtn.setTextColor(ACCENT);
         modeBtn.setPadding((int) dp(10), 0, (int) dp(10), 0);
         modeBtn.setMinWidth(0);
@@ -214,13 +460,14 @@ public class MainActivity extends Activity {
             }
         });
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(32));
-        topButtons.addView(modeBtn, mlp);
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        mlp.leftMargin = (int) dp(12);
+        titleRow.addView(modeBtn, mlp);
 
         Button about = new Button(this);
         about.setText("作者");
         about.setAllCaps(false);
-        about.setTextSize(12);
+        about.setTextSize(11);
         about.setTextColor(SUB);
         about.setPadding((int) dp(12), 0, (int) dp(12), 0);
         about.setMinWidth(0);
@@ -234,9 +481,30 @@ public class MainActivity extends Activity {
             }
         });
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(32));
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
         alp.leftMargin = (int) dp(8);
         topButtons.addView(about, alp);
+
+        Button importer = new Button(this);
+        importer.setText("导入");
+        importer.setAllCaps(false);
+        importer.setTextSize(11);
+        importer.setTextColor(SUB);
+        importer.setPadding((int) dp(12), 0, (int) dp(12), 0);
+        importer.setMinWidth(0);
+        importer.setMinimumWidth(0);
+        importer.setMinHeight(0);
+        importer.setMinimumHeight(0);
+        importer.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        importer.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showImportHelp();
+            }
+        });
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        ilp.leftMargin = (int) dp(8);
+        topButtons.addView(importer, ilp);
 
         headerRow.addView(topButtons);
         root.addView(headerRow);
@@ -257,7 +525,7 @@ public class MainActivity extends Activity {
         body.setTextColor(TEXT);
         body.setTextSize(16);
         body.setLineSpacing(dp(9), 1f);
-        body.setPadding((int) dp(20), (int) dp(20), (int) dp(20), (int) dp(20));
+        body.setPadding((int) dp(20), (int) dp(20), (int) dp(20), (int) dp(6));
         body.setTypeface(Typeface.create("serif", Typeface.NORMAL));
         body.setOnLongClickListener(new View.OnLongClickListener() {
             public boolean onLongClick(View v) {
@@ -265,7 +533,19 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
-        sv.addView(body, new ViewGroup.LayoutParams(
+        LinearLayout textCol = new LinearLayout(this);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.addView(body, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        trans = new TextView(this);
+        trans.setTextColor(0xFF8A8A94);
+        trans.setTextSize(13);
+        trans.setLineSpacing(dp(6), 1f);
+        trans.setPadding((int) dp(20), 0, (int) dp(20), (int) dp(20));
+        trans.setTypeface(Typeface.create("serif", Typeface.NORMAL));
+        textCol.addView(trans, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        sv.addView(textCol, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(sv, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -371,6 +651,7 @@ public class MainActivity extends Activity {
                 .setView(box)
                 .setPositiveButton("关闭", null)
                 .show();
+        styleDialog(dlg);
         try {
             if (dlg.getWindow() != null) {
                 dlg.getWindow().setBackgroundDrawable(round(CARD, dp(18)));
@@ -398,7 +679,10 @@ public class MainActivity extends Activity {
     private void copy() {
         try {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(ClipData.newPlainText("每日一遍", body.getText()));
+            String zh = body.getText().toString();
+            String en = trans != null ? trans.getText().toString() : "";
+            String all = en.length() > 0 ? zh + "\n\n" + en : zh;
+            cm.setPrimaryClip(ClipData.newPlainText("每日一遍", all));
             Toast.makeText(this, "已复制，去粘贴吧", Toast.LENGTH_SHORT).show();
         } catch (Throwable ignored) {
         }
@@ -461,6 +745,8 @@ public class MainActivity extends Activity {
         ed.apply();
 
         body.setText(pool[idx].trim());
+        String[] enPool = mode == 0 ? ownEn : hotEn;
+        if (trans != null) trans.setText(idx < enPool.length ? enPool[idx].trim() : "");
         // A new quote starts at the top: without this, a ScrollView left
         // scrolled down by a long previous quote shows the new one mid-way.
         if (scroll != null) {
@@ -474,6 +760,10 @@ public class MainActivity extends Activity {
         // Subtle fade-in so the switch does not feel like a hard cut.
         body.setAlpha(0f);
         body.animate().alpha(1f).setDuration(180).start();
+        if (trans != null) {
+            trans.setAlpha(0f);
+            trans.animate().alpha(1f).setDuration(180).start();
+        }
 
         String seenInfo;
         if (randomMode) {
@@ -482,7 +772,9 @@ public class MainActivity extends Activity {
             int n = (mode == 0 ? seenOwn : seenHot).size();
             seenInfo = "已看 " + n + " / " + pool.length;
         }
-        counter.setText("第 " + (idx + 1) + " / " + pool.length + " 篇 · 已翻 "
-                + (mode == 0 ? countOwn : countHot) + " 次 · " + seenInfo);
+        int flips = mode == 0 ? countOwn : countHot;
+        counter.setText("第 " + (idx + 1) + " / " + pool.length + " 篇 · 已翻 " + flips + " 次");
+        source.setText((mode == 0 ? "水泥封心 · 原创长文案" : "抖音热门 · 全网热门语录")
+                + " · " + seenInfo);
     }
 }
