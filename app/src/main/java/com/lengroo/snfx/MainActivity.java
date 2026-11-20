@@ -15,6 +15,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,6 +35,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Random;
@@ -75,6 +77,16 @@ public class MainActivity extends Activity {
     private final Set<Integer> favOwn = new HashSet<Integer>();
     private final Set<Integer> favHot = new HashSet<Integer>();
     private Button favBtn;
+    private Button speakBtn;
+    private final ArrayList<Integer> history = new ArrayList<Integer>();
+    private TextToSpeech tts;
+    private boolean ttsReady = false;
+    private boolean speakingNow = false;
+    private boolean speakEnglish = false;
+    private int textSizeLevel = 1;
+    private int lineLevel = 1;
+    private Button typeBtn;
+    private AlertDialog typeDialog;
     private TextView source;
     private ScrollView scroll;
     private Button toggle;
@@ -93,6 +105,9 @@ public class MainActivity extends Activity {
         readSeen("seen_own", seenOwn);
         readSeen("fav_own", favOwn);
         readSeen("fav_hot", favHot);
+        speakEnglish = prefs.getBoolean("speak_en", false);
+        textSizeLevel = prefs.getInt("text_size", 1);
+        lineLevel = prefs.getInt("line_space", 1);
         readSeen("seen_hot", seenHot);
 
         baseOwn = load("quotes.txt");
@@ -452,55 +467,19 @@ public class MainActivity extends Activity {
 
         LinearLayout headerRow = new LinearLayout(this);
         headerRow.setOrientation(LinearLayout.HORIZONTAL);
-        headerRow.setGravity(Gravity.TOP);
-        headerRow.setPadding((int) dp(20), (int) dp(20), (int) dp(14), (int) dp(8));
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
+        headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        headerRow.setPadding((int) dp(20), (int) dp(18), (int) dp(14), 0);
 
         TextView title = new TextView(this);
         title.setText("每日一遍");
         title.setTextColor(TEXT);
         title.setTextSize(24);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
         titleRow.addView(title);
-        header.addView(titleRow);
-
-        LinearLayout meta = new LinearLayout(this);
-        meta.setOrientation(LinearLayout.HORIZONTAL);
-        meta.setGravity(Gravity.CENTER_VERTICAL);
-        meta.setPadding(0, (int) dp(8), 0, 0);
-
-        View dot = new View(this);
-        dot.setBackground(round(ACCENT, dp(3)));
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams((int) dp(6), (int) dp(6));
-        dlp.rightMargin = (int) dp(8);
-        meta.addView(dot, dlp);
-
-        counter = new TextView(this);
-        counter.setTextColor(SUB);
-        counter.setTextSize(11);
-        counter.setSingleLine(true);
-        counter.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        meta.addView(counter);
-        header.addView(meta);
-
-        source = new TextView(this);
-        source.setTextColor(SUB);
-        source.setTextSize(11);
-        source.setPadding(0, (int) dp(6), 0, 0);
-        header.addView(source);
-
-        headerRow.addView(header, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        // 上方：模式切换 + 作者
-        LinearLayout topButtons = new LinearLayout(this);
-        topButtons.setOrientation(LinearLayout.HORIZONTAL);
-        topButtons.setGravity(Gravity.TOP);
 
         modeBtn = new Button(this);
         modeBtn.setAllCaps(false);
@@ -524,6 +503,10 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
         mlp.leftMargin = (int) dp(12);
         titleRow.addView(modeBtn, mlp);
+
+        LinearLayout topButtons = new LinearLayout(this);
+        topButtons.setOrientation(LinearLayout.HORIZONTAL);
+        topButtons.setGravity(Gravity.CENTER_VERTICAL);
 
         Button about = new Button(this);
         about.setText("作者");
@@ -567,8 +550,35 @@ public class MainActivity extends Activity {
         ilp.leftMargin = (int) dp(8);
         topButtons.addView(importer, ilp);
 
+        headerRow.addView(titleRow, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         headerRow.addView(topButtons);
         root.addView(headerRow);
+
+        LinearLayout meta = new LinearLayout(this);
+        meta.setOrientation(LinearLayout.HORIZONTAL);
+        meta.setGravity(Gravity.CENTER_VERTICAL);
+        meta.setPadding((int) dp(20), (int) dp(8), 0, 0);
+
+        View dot = new View(this);
+        dot.setBackground(round(ACCENT, dp(3)));
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams((int) dp(6), (int) dp(6));
+        dlp.rightMargin = (int) dp(8);
+        meta.addView(dot, dlp);
+
+        counter = new TextView(this);
+        counter.setTextColor(SUB);
+        counter.setTextSize(11);
+        counter.setSingleLine(true);
+        counter.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        meta.addView(counter);
+        root.addView(meta);
+
+        source = new TextView(this);
+        source.setTextColor(SUB);
+        source.setTextSize(11);
+        source.setPadding((int) dp(20), (int) dp(6), 0, 0);
+        root.addView(source);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -595,7 +605,8 @@ public class MainActivity extends Activity {
                     float dy = e.getY() - sy;
                     if (Math.abs(dx) > dp(56) && Math.abs(dx) > Math.abs(dy) * 1.6f
                             && System.currentTimeMillis() - st < 700) {
-                        showNext();
+                        if (dx < 0) showNext();
+                        else goBack();
                     }
                 }
                 return false;
@@ -673,6 +684,54 @@ public class MainActivity extends Activity {
         });
         footer.addView(indexBtn, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28)));
+
+        speakBtn = new Button(this);
+        speakBtn.setText("朗读");
+        speakBtn.setAllCaps(false);
+        speakBtn.setTextSize(11);
+        speakBtn.setTextColor(0xFF8A8A94);
+        speakBtn.setPadding((int) dp(16), 0, (int) dp(16), 0);
+        speakBtn.setMinWidth(0);
+        speakBtn.setMinimumWidth(0);
+        speakBtn.setMinHeight(0);
+        speakBtn.setMinimumHeight(0);
+        speakBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
+        speakBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                toggleSpeak();
+            }
+        });
+        speakBtn.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) {
+                showSpeakLang();
+                return true;
+            }
+        });
+        LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        slp2.leftMargin = (int) dp(8);
+        footer.addView(speakBtn, slp2);
+        typeBtn = new Button(this);
+        typeBtn.setText("Aa");
+        typeBtn.setAllCaps(false);
+        typeBtn.setTextSize(12);
+        typeBtn.setTextColor(0xFF8A8A94);
+        typeBtn.setPadding((int) dp(14), 0, (int) dp(14), 0);
+        typeBtn.setMinWidth(0);
+        typeBtn.setMinimumWidth(0);
+        typeBtn.setMinHeight(0);
+        typeBtn.setMinimumHeight(0);
+        typeBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
+        typeBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showTypography();
+            }
+        });
+        LinearLayout.LayoutParams tlp2 = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        tlp2.leftMargin = (int) dp(8);
+        footer.addView(typeBtn, tlp2);
+
         card.addView(footer);
 
         root.addView(card, clp);
@@ -717,6 +776,7 @@ public class MainActivity extends Activity {
         root.addView(toggle, tlp);
 
         setContentView(root);
+        applyTypography();
         refreshLabels();
     }
 
@@ -1059,6 +1119,22 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        if (speakingNow) stopSpeak();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+            tts = null;
+        }
+        super.onDestroy();
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putInt("cur_idx", currentIndex);
@@ -1146,10 +1222,354 @@ public class MainActivity extends Activity {
         else ed.putString("seen_hot", writeSeen(seenHot));
         ed.apply();
 
+        pushHistory(idx);
         renderIndex(idx);
     }
 
+    private void pushHistory(int idx) {
+        history.add(idx);
+        while (history.size() > 200) history.remove(0);
+    }
+
+    private void goBack() {
+        if (history.size() < 2) {
+            Toast.makeText(this, "已经在最新一篇了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        history.remove(history.size() - 1);
+        int prev = history.get(history.size() - 1);
+        String[] pool = mode == 0 ? own : hot;
+        if (prev >= pool.length) {
+            history.clear();
+            return;
+        }
+        currentIndex = prev;
+        renderIndex(prev);
+    }
+
+    private void toggleSpeak() {
+        if (speakingNow) {
+            stopSpeak();
+            Toast.makeText(this, "已停止朗读", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (body.getText().toString().trim().length() == 0) return;
+        if (tts != null && ttsReady) {
+            speakNow();
+            return;
+        }
+        if (tts != null) {
+            try {
+                tts.shutdown();
+            } catch (Throwable ignored) {
+            }
+            tts = null;
+            ttsReady = false;
+        }
+        tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
+            public void onInit(int status) {
+                if (status == TextToSpeech.SUCCESS && tts != null) {
+                    tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                        @Override
+                        public void onStart(String utteranceId) {
+                        }
+
+                        @Override
+                        public void onDone(String utteranceId) {
+                            runOnUiThread(new Runnable() {
+                                public void run() {
+                                    speakingNow = false;
+                                    updateSpeakLabel();
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onError(String utteranceId) {
+                            runOnUiThread(new Runnable() {
+                                public void run() {
+                                    speakingNow = false;
+                                    updateSpeakLabel();
+                                }
+                            });
+                        }
+                    });
+                    ttsReady = true;
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            speakNow();
+                        }
+                    });
+                } else {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            showTtsHelp("系统里没有可用的语音引擎（TTS），多半是没装或没启用。");
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private void showTtsHelp(String why) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.setPadding((int) dp(22), (int) dp(20), (int) dp(22), (int) dp(6));
+
+        TextView t = new TextView(this);
+        t.setText("语音引擎初始化失败");
+        t.setTextColor(TEXT);
+        t.setTextSize(17);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        box.addView(t);
+
+        TextView m = new TextView(this);
+        m.setText(why + String.valueOf((char) 10) + String.valueOf((char) 10) +
+                "可以到系统「设置 → 无障碍 → 文字转语音(TTS)」里安装 / 启用一个引擎并选中文，然后回来点「重试」。");
+        m.setTextColor(SUB);
+        m.setTextSize(13);
+        m.setLineSpacing(dp(5), 1f);
+        m.setPadding(0, (int) dp(10), 0, (int) dp(6));
+        box.addView(m);
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setPositiveButton("打开语音设置", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        openTtsSettings();
+                    }
+                })
+                .setNeutralButton("重试", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        tts = null;
+                        ttsReady = false;
+                        toggleSpeak();
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+        styleDialog(dlg);
+    }
+
+    private void openTtsSettings() {
+        String[] actions = new String[]{
+                "com.android.settings.TTS_SETTINGS",
+                "com.android.settings.Settings$TextToSpeechSettingsActivity",
+                android.provider.Settings.ACTION_SETTINGS
+        };
+        for (int i = 0; i < actions.length; i++) {
+            try {
+                startActivity(new Intent(actions[i]));
+                return;
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void applyTypography() {
+        int[] zh = new int[]{14, 16, 18, 21};
+        int[] en = new int[]{11, 13, 15, 17};
+        int[] zl = new int[]{6, 9, 13};
+        int[] el = new int[]{4, 6, 9};
+        int ts = Math.max(0, Math.min(textSizeLevel, zh.length - 1));
+        int ls = Math.max(0, Math.min(lineLevel, zl.length - 1));
+        if (body != null) {
+            body.setTextSize(zh[ts]);
+            body.setLineSpacing(dp(zl[ls]), 1f);
+        }
+        if (trans != null) {
+            trans.setTextSize(en[ts]);
+            trans.setLineSpacing(dp(el[ls]), 1f);
+        }
+    }
+
+    private void showTypography() {
+        if (typeDialog != null && typeDialog.isShowing()) {
+            typeDialog.dismiss();
+        }
+        typeDialog = null;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(6));
+
+        TextView title = new TextView(this);
+        title.setText("排版");
+        title.setTextColor(TEXT);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding(0, 0, 0, (int) dp(12));
+        box.addView(title);
+
+        box.addView(labelRow("字号"));
+        final String[] sizeNames = new String[]{"小", "标准", "大", "特大"};
+        LinearLayout sizeRow = new LinearLayout(this);
+        sizeRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < sizeNames.length; i++) {
+            final int which = i;
+            sizeRow.addView(chip(sizeNames[i], textSizeLevel == i, new View.OnClickListener() {
+                public void onClick(View v) {
+                    textSizeLevel = which;
+                    prefs.edit().putInt("text_size", textSizeLevel).apply();
+                    applyTypography();
+                    showTypography();
+                }
+            }), chipParams(i == 0 ? 0 : 8));
+        }
+        box.addView(sizeRow);
+
+        TextView gap = new TextView(this);
+        gap.setText("");
+        gap.setHeight((int) dp(10));
+        box.addView(gap);
+
+        box.addView(labelRow("行距"));
+        final String[] lineNames = new String[]{"紧凑", "标准", "宽松"};
+        LinearLayout lineRow = new LinearLayout(this);
+        lineRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < lineNames.length; i++) {
+            final int which = i;
+            lineRow.addView(chip(lineNames[i], lineLevel == i, new View.OnClickListener() {
+                public void onClick(View v) {
+                    lineLevel = which;
+                    prefs.edit().putInt("line_space", lineLevel).apply();
+                    applyTypography();
+                    showTypography();
+                }
+            }), chipParams(i == 0 ? 0 : 8));
+        }
+        box.addView(lineRow);
+
+        TextView tip = new TextView(this);
+        tip.setText("中文与英文会一起缩放，设置会记住。");
+        tip.setTextColor(SUB);
+        tip.setTextSize(11);
+        tip.setPadding(0, (int) dp(14), 0, 0);
+        box.addView(tip);
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setNegativeButton("关闭", null)
+                .show();
+        typeDialog = dlg;
+        styleDialog(dlg);
+    }
+
+    private TextView labelRow(String text) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextColor(SUB);
+        t.setTextSize(12);
+        t.setPadding(0, (int) dp(4), 0, (int) dp(8));
+        return t;
+    }
+
+    private LinearLayout.LayoutParams chipParams(int leftMargin) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, (int) dp(34), 1f);
+        lp.leftMargin = (int) dp(leftMargin);
+        return lp;
+    }
+
+    private TextView chip(String text, boolean on, View.OnClickListener l) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(13);
+        t.setGravity(Gravity.CENTER);
+        t.setTextColor(on ? ACCENT : TEXT);
+        t.setBackground(outline(on ? 0x22FF5A7A : 0x00000000, on ? ACCENT : LINE, dp(12)));
+        t.setOnClickListener(l);
+        return t;
+    }
+
+    private void speakNow() {
+        if (tts == null || !ttsReady) return;
+        String text = speakEnglish
+                ? (trans != null ? trans.getText().toString().trim() : "")
+                : body.getText().toString().trim();
+        if (text.length() == 0) {
+            Toast.makeText(this, speakEnglish ? "这篇没有英文译文" : "没有可朗读的文字",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int r = tts.setLanguage(speakEnglish ? Locale.US : Locale.SIMPLIFIED_CHINESE);
+        if (!speakEnglish && (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED)) {
+            r = tts.setLanguage(Locale.CHINESE);
+        }
+        if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+            showTtsHelp(speakEnglish ? "语音引擎里没有英文语音包。" : "语音引擎里没有中文语音包。");
+            return;
+        }
+        tts.setSpeechRate(speakEnglish ? 0.92f : 0.95f);
+        speakingNow = true;
+        updateSpeakLabel();
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "snfx");
+        Toast.makeText(this, "朗读中（" + (speakEnglish ? "英文" : "中文") + "）· 点底部「停止」可结束",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private void showSpeakLang() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(6));
+
+        TextView title = new TextView(this);
+        title.setText("朗读语言");
+        title.setTextColor(TEXT);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding(0, 0, 0, (int) dp(10));
+        box.addView(title);
+
+        String[] names = new String[]{"中文（默认）", "English"};
+        boolean[] checked = new boolean[]{!speakEnglish, speakEnglish};
+        final AlertDialog[] holder = new AlertDialog[1];
+        for (int i = 0; i < names.length; i++) {
+            final int which = i;
+            final boolean on = checked[i];
+            TextView row = new TextView(this);
+            row.setText((on ? "✓  " : "     ") + names[i]);
+            row.setTextColor(on ? ACCENT : TEXT);
+            row.setTextSize(15);
+            row.setPadding((int) dp(8), (int) dp(16), (int) dp(8), (int) dp(16));
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (holder[0] != null) holder[0].dismiss();
+                    if (speakingNow) stopSpeak();
+                    speakEnglish = which == 1;
+                    prefs.edit().putBoolean("speak_en", speakEnglish).apply();
+                    Toast.makeText(MainActivity.this,
+                            "朗读语言：" + (speakEnglish ? "英文" : "中文"), Toast.LENGTH_SHORT).show();
+                }
+            });
+            box.addView(row);
+        }
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setNegativeButton("关闭", null)
+                .show();
+        holder[0] = dlg;
+        styleDialog(dlg);
+    }
+
+    private void stopSpeak() {
+        speakingNow = false;
+        updateSpeakLabel();
+        if (tts != null) tts.stop();
+    }
+
+    private void updateSpeakLabel() {
+        if (speakBtn != null) {
+            speakBtn.setText(speakingNow ? "停止" : "朗读");
+            speakBtn.setTextColor(speakingNow ? ACCENT : 0xFF8A8A94);
+        }
+    }
+
     private void renderIndex(int idx) {
+        if (speakingNow) stopSpeak();
         currentIndex = idx;
         String[] pool = mode == 0 ? own : hot;
         String[] enPool = mode == 0 ? ownEn : hotEn;
@@ -1200,6 +1620,7 @@ public class MainActivity extends Activity {
         prefs.edit().putInt("count_own", countOwn).putInt("count_hot", countHot)
                 .putString("seen_own", writeSeen(seenOwn))
                 .putString("seen_hot", writeSeen(seenHot)).apply();
+        pushHistory(idx);
         renderIndex(idx);
     }
 
