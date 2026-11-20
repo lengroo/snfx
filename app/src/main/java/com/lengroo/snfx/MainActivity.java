@@ -20,6 +20,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.EditText;
+import android.widget.ListView;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -65,6 +69,11 @@ public class MainActivity extends Activity {
     private TextView counter;
     private TextView body;
     private TextView trans;
+    private Button indexBtn;
+    private int currentIndex = 0;
+    private final Set<Integer> favOwn = new HashSet<Integer>();
+    private final Set<Integer> favHot = new HashSet<Integer>();
+    private Button favBtn;
     private TextView source;
     private ScrollView scroll;
     private Button toggle;
@@ -85,6 +94,8 @@ public class MainActivity extends Activity {
         countOwn = prefs.getInt("count_own", 0);
         countHot = prefs.getInt("count_hot", 0);
         readSeen("seen_own", seenOwn);
+        readSeen("fav_own", favOwn);
+        readSeen("fav_hot", favHot);
         readSeen("seen_hot", seenHot);
 
         baseOwn = load("quotes.txt");
@@ -365,6 +376,11 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("取消", null)
+                .setNeutralButton("管理已导入", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        showImportManager();
+                    }
+                })
                 .show();
         styleDialog(dlg);
     }
@@ -379,6 +395,8 @@ public class MainActivity extends Activity {
             if (ok != null) ok.setTextColor(ACCENT);
             Button no = d.getButton(AlertDialog.BUTTON_NEGATIVE);
             if (no != null) no.setTextColor(SUB);
+            Button mid = d.getButton(AlertDialog.BUTTON_NEUTRAL);
+            if (mid != null) mid.setTextColor(ACCENT);
         } catch (Throwable ignored) {
         }
     }
@@ -529,7 +547,7 @@ public class MainActivity extends Activity {
         body.setTypeface(Typeface.create("serif", Typeface.NORMAL));
         body.setOnLongClickListener(new View.OnLongClickListener() {
             public boolean onLongClick(View v) {
-                copy();
+                showActions();
                 return true;
             }
         });
@@ -549,6 +567,51 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(sv, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(0, 0, 0, (int) dp(10));
+        favBtn = new Button(this);
+        favBtn.setText("收藏");
+        favBtn.setAllCaps(false);
+        favBtn.setTextSize(11);
+        favBtn.setTextColor(0xFF8A8A94);
+        favBtn.setPadding((int) dp(16), 0, (int) dp(16), 0);
+        favBtn.setMinWidth(0);
+        favBtn.setMinimumWidth(0);
+        favBtn.setMinHeight(0);
+        favBtn.setMinimumHeight(0);
+        favBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        favBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showFavs();
+            }
+        });
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        flp.rightMargin = (int) dp(8);
+        footer.addView(favBtn, flp);
+
+        indexBtn = new Button(this);
+        indexBtn.setAllCaps(false);
+        indexBtn.setTextSize(11);
+        indexBtn.setTextColor(ACCENT);
+        indexBtn.setPadding((int) dp(16), 0, (int) dp(16), 0);
+        indexBtn.setMinWidth(0);
+        indexBtn.setMinimumWidth(0);
+        indexBtn.setMinHeight(0);
+        indexBtn.setMinimumHeight(0);
+        indexBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        indexBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showIndex();
+            }
+        });
+        footer.addView(indexBtn, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28)));
+        card.addView(footer);
+
         root.addView(card, clp);
 
         Button btn = new Button(this);
@@ -608,8 +671,33 @@ public class MainActivity extends Activity {
         t0.setTextColor(TEXT);
         t0.setTextSize(18);
         t0.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        t0.setPadding(0, 0, 0, (int) dp(12));
-        box.addView(t0);
+
+        Button poke = new Button(this);
+        poke.setText("不要点我");
+        poke.setAllCaps(false);
+        poke.setTextSize(11);
+        poke.setTextColor(0xFF8A8A94);
+        poke.setPadding((int) dp(12), 0, (int) dp(12), 0);
+        poke.setMinWidth(0);
+        poke.setMinimumWidth(0);
+        poke.setMinHeight(0);
+        poke.setMinimumHeight(0);
+        poke.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        poke.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showSecret();
+            }
+        });
+
+        LinearLayout aboutTitleRow = new LinearLayout(this);
+        aboutTitleRow.setOrientation(LinearLayout.HORIZONTAL);
+        aboutTitleRow.setGravity(Gravity.CENTER_VERTICAL);
+        aboutTitleRow.setPadding(0, 0, 0, (int) dp(12));
+        aboutTitleRow.addView(t0, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        aboutTitleRow.addView(poke, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28)));
+        box.addView(aboutTitleRow);
 
         TextView t1 = new TextView(this);
         t1.setText("作者");
@@ -660,6 +748,231 @@ public class MainActivity extends Activity {
             if (pb != null) pb.setTextColor(ACCENT);
         } catch (Throwable ignored) {
         }
+    }
+
+    private void removeFrom(Set<Integer> set, int from) {
+        List<Integer> drop = new ArrayList<Integer>();
+        for (Integer v : set) {
+            if (v >= from) drop.add(v);
+        }
+        set.removeAll(drop);
+    }
+
+    private void shiftSetAfterDelete(Set<Integer> set, int removed) {
+        List<Integer> list = new ArrayList<Integer>(set);
+        set.clear();
+        for (Integer v : list) {
+            if (v < removed) set.add(v);
+            else if (v > removed) set.add(v - 1);
+        }
+    }
+
+    private void persistAllSets() {
+        prefs.edit().putString("seen_own", writeSeen(seenOwn))
+                .putString("seen_hot", writeSeen(seenHot))
+                .putString("fav_own", writeSeen(favOwn))
+                .putString("fav_hot", writeSeen(favHot)).apply();
+    }
+
+    private void deleteImported(int pos) {
+        String[] src = mode == 0 ? impOwn : impHot;
+        String[] srcEn = mode == 0 ? impOwnEn : impHotEn;
+        if (pos < 0 || pos >= src.length) return;
+        int baseLen = (mode == 0 ? baseOwn : baseHot).length;
+        int globalIdx = baseLen + pos;
+        List<String> z = new ArrayList<String>();
+        List<String> e = new ArrayList<String>();
+        for (int i = 0; i < src.length; i++) {
+            if (i == pos) continue;
+            z.add(src[i]);
+            e.add(i < srcEn.length ? srcEn[i] : "");
+        }
+        try {
+            if (mode == 0) {
+                writeCustom("custom_own.txt", z);
+                writeCustom("custom_own_en.txt", e);
+            } else {
+                writeCustom("custom_hot.txt", z);
+                writeCustom("custom_hot_en.txt", e);
+            }
+        } catch (Throwable t) {
+            Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        shiftSetAfterDelete(seenOwn, globalIdx);
+        shiftSetAfterDelete(seenHot, globalIdx);
+        shiftSetAfterDelete(favOwn, globalIdx);
+        shiftSetAfterDelete(favHot, globalIdx);
+        persistAllSets();
+        reloadImported();
+        rebuildPools();
+        if (currentIndex > globalIdx) currentIndex--;
+        else if (currentIndex == globalIdx) currentIndex = Math.max(0, globalIdx - 1);
+        renderIndex(currentIndex);
+        Toast.makeText(this, "已删除这条导入的文案", Toast.LENGTH_SHORT).show();
+    }
+
+    private void clearImported() {
+        int baseLen = (mode == 0 ? baseOwn : baseHot).length;
+        try {
+            if (mode == 0) {
+                writeCustom("custom_own.txt", new ArrayList<String>());
+                writeCustom("custom_own_en.txt", new ArrayList<String>());
+            } else {
+                writeCustom("custom_hot.txt", new ArrayList<String>());
+                writeCustom("custom_hot_en.txt", new ArrayList<String>());
+            }
+        } catch (Throwable t) {
+            Toast.makeText(this, "清空失败", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        removeFrom(seenOwn, baseLen);
+        removeFrom(seenHot, baseLen);
+        removeFrom(favOwn, baseLen);
+        removeFrom(favHot, baseLen);
+        persistAllSets();
+        reloadImported();
+        rebuildPools();
+        currentIndex = 0;
+        renderIndex(0);
+        Toast.makeText(this, "已清空导入的文案", Toast.LENGTH_SHORT).show();
+    }
+
+    private void showImportManager() {
+        final String[] src = mode == 0 ? impOwn : impHot;
+        if (src.length == 0) {
+            Toast.makeText(this, "还没有导入过文案", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        List<String> items = new ArrayList<String>();
+        for (int i = 0; i < src.length; i++) {
+            String t = src[i].replace(String.valueOf((char) 10), " ").trim();
+            if (t.length() > 26) t = t.substring(0, 26) + "…";
+            items.add((i + 1) + ".  " + t);
+        }
+        ArrayAdapter<String> ad = new ArrayAdapter<String>(this,
+                android.R.layout.simple_list_item_1, items) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                tv.setTextColor(TEXT);
+                tv.setTextSize(13);
+                tv.setPadding((int) dp(18), (int) dp(12), (int) dp(18), (int) dp(12));
+                tv.setSingleLine(true);
+                tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                return tv;
+            }
+        };
+        ListView lv = new ListView(this);
+        lv.setAdapter(ad);
+        lv.setBackgroundColor(CARD);
+        lv.setDivider(null);
+        lv.setDividerHeight(0);
+        lv.setCacheColorHint(0);
+
+        TextView title = new TextView(this);
+        title.setText("我导入的 · 共 " + src.length + " 篇");
+        title.setTextColor(TEXT);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(4));
+
+        TextView hint = new TextView(this);
+        hint.setText("点开跳到那篇，长按删除这一条");
+        hint.setTextColor(0xFF6E6E78);
+        hint.setTextSize(11);
+        hint.setPadding((int) dp(20), 0, (int) dp(20), (int) dp(8));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.addView(title);
+        box.addView(hint);
+        box.addView(lv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(420)));
+
+        final AlertDialog[] holder = new AlertDialog[1];
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setPositiveButton("清空全部", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        confirmClearImported();
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+        holder[0] = dlg;
+        styleDialog(dlg);
+        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                int baseLen = (mode == 0 ? baseOwn : baseHot).length;
+                jumpTo(baseLen + position);
+                if (holder[0] != null) holder[0].dismiss();
+            }
+        });
+        lv.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                deleteImported(position);
+                if (holder[0] != null) holder[0].dismiss();
+                showImportManager();
+                return true;
+            }
+        });
+    }
+
+    private void confirmClearImported() {
+        new AlertDialog.Builder(this)
+                .setTitle("清空导入的文案？")
+                .setMessage("会把当前池子里你自己导入的 "
+                        + (mode == 0 ? impOwn.length : impHot.length) + " 条全部删掉，内置文案不受影响。")
+                .setPositiveButton("清空", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        clearImported();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void showSecret() {
+        String text = "";
+        try {
+            InputStream in = getAssets().open("nopoint.txt");
+            text = readAll(in).trim();
+            in.close();
+        } catch (Throwable t) {
+            text = "文本读取失败";
+        }
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextColor(TEXT);
+        tv.setTextSize(14);
+        tv.setLineSpacing(dp(7), 1f);
+        tv.setPadding((int) dp(20), (int) dp(16), (int) dp(20), (int) dp(8));
+        tv.setTextIsSelectable(true);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+
+        TextView title = new TextView(this);
+        title.setText("不要点我");
+        title.setTextColor(TEXT);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding((int) dp(20), (int) dp(18), (int) dp(20), 0);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.addView(title);
+        box.addView(sv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(460)));
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setPositiveButton("关闭", null)
+                .show();
+        styleDialog(dlg);
     }
 
     private void refreshLabels() {
@@ -744,11 +1057,16 @@ public class MainActivity extends Activity {
         else ed.putString("seen_hot", writeSeen(seenHot));
         ed.apply();
 
-        body.setText(pool[idx].trim());
+        renderIndex(idx);
+    }
+
+    private void renderIndex(int idx) {
+        currentIndex = idx;
+        String[] pool = mode == 0 ? own : hot;
         String[] enPool = mode == 0 ? ownEn : hotEn;
+        if (idx < 0 || idx >= pool.length) return;
+        body.setText(pool[idx].trim());
         if (trans != null) trans.setText(idx < enPool.length ? enPool[idx].trim() : "");
-        // A new quote starts at the top: without this, a ScrollView left
-        // scrolled down by a long previous quote shows the new one mid-way.
         if (scroll != null) {
             scroll.scrollTo(0, 0);
             scroll.post(new Runnable() {
@@ -757,14 +1075,12 @@ public class MainActivity extends Activity {
                 }
             });
         }
-        // Subtle fade-in so the switch does not feel like a hard cut.
         body.setAlpha(0f);
         body.animate().alpha(1f).setDuration(180).start();
         if (trans != null) {
             trans.setAlpha(0f);
             trans.animate().alpha(1f).setDuration(180).start();
         }
-
         String seenInfo;
         if (randomMode) {
             seenInfo = "随机模式";
@@ -776,5 +1092,327 @@ public class MainActivity extends Activity {
         counter.setText("第 " + (idx + 1) + " / " + pool.length + " 篇 · 已翻 " + flips + " 次");
         source.setText((mode == 0 ? "水泥封心 · 原创长文案" : "抖音热门 · 全网热门语录")
                 + " · " + seenInfo);
+        if (indexBtn != null) indexBtn.setText("目录 · " + pool.length);
+        if (favBtn != null) favBtn.setText("收藏 · " + (mode == 0 ? favOwn : favHot).size());
+    }
+
+    private void jumpTo(int idx) {
+        String[] pool = mode == 0 ? own : hot;
+        if (idx < 0 || idx >= pool.length) return;
+        Set<Integer> seen = mode == 0 ? seenOwn : seenHot;
+        seen.add(idx);
+        if (mode == 0) {
+            lastOwn = idx;
+            countOwn++;
+        } else {
+            lastHot = idx;
+            countHot++;
+        }
+        prefs.edit().putInt("count_own", countOwn).putInt("count_hot", countHot)
+                .putString("seen_own", writeSeen(seenOwn))
+                .putString("seen_hot", writeSeen(seenHot)).apply();
+        renderIndex(idx);
+    }
+
+    private Set<Integer> favSet() {
+        return mode == 0 ? favOwn : favHot;
+    }
+
+    private void persistFavs() {
+        prefs.edit().putString("fav_own", writeSeen(favOwn))
+                .putString("fav_hot", writeSeen(favHot)).apply();
+    }
+
+    private void toggleFav(int idx) {
+        Set<Integer> set = favSet();
+        if (set.contains(idx)) {
+            set.remove(idx);
+            Toast.makeText(this, "已取消收藏", Toast.LENGTH_SHORT).show();
+        } else {
+            set.add(idx);
+            Toast.makeText(this, "已收藏", Toast.LENGTH_SHORT).show();
+        }
+        persistFavs();
+        renderIndex(currentIndex);
+    }
+
+    private void showActions() {
+        final int idx = currentIndex;
+        boolean fav = favSet().contains(idx);
+        String[] labels = new String[]{"复制", fav ? "取消收藏" : "收藏", "分享成图"};
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        final AlertDialog[] holder = new AlertDialog[1];
+        for (int i = 0; i < labels.length; i++) {
+            final int which = i;
+            TextView row = new TextView(this);
+            row.setText(labels[i]);
+            row.setTextColor(which == 2 ? ACCENT : TEXT);
+            row.setTextSize(15);
+            row.setPadding((int) dp(24), (int) dp(18), (int) dp(24), (int) dp(18));
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (holder[0] != null) holder[0].dismiss();
+                    if (which == 0) copy();
+                    else if (which == 1) toggleFav(idx);
+                    else shareCurrent(idx);
+                }
+            });
+            box.addView(row);
+        }
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .show();
+        holder[0] = dlg;
+        styleDialog(dlg);
+    }
+
+    private void shareCurrent(int idx) {
+        String[] pool = mode == 0 ? own : hot;
+        String[] enPool = mode == 0 ? ownEn : hotEn;
+        if (idx < 0 || idx >= pool.length) return;
+        String en = idx < enPool.length ? enPool[idx].trim() : "";
+        try {
+            ShareCard.render(getCacheDir(), pool[idx].trim(), en, "每日一遍 · " + AUTHOR);
+            Uri u = Uri.parse("content://" + ShareProvider.AUTHORITY + "/share.png");
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType("image/png");
+            i.putExtra(Intent.EXTRA_STREAM, u);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "分享这篇"));
+        } catch (Throwable t) {
+            Toast.makeText(this, "生成分享图失败：" + t.getClass().getSimpleName(),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showFavs() {
+        final Set<Integer> set = favSet();
+        final String[] pool = mode == 0 ? own : hot;
+        if (set.isEmpty()) {
+            Toast.makeText(this, "还没有收藏，长按正文可以收藏", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final List<Integer> ids = new ArrayList<Integer>();
+        for (Integer i : set) {
+            if (i >= 0 && i < pool.length) ids.add(i);
+        }
+        java.util.Collections.sort(ids);
+        List<String> items = new ArrayList<String>();
+        for (int k = 0; k < ids.size(); k++) {
+            int real = ids.get(k);
+            String t = pool[real].replace(String.valueOf((char) 10), " ").trim();
+            if (t.length() > 26) t = t.substring(0, 26) + "…";
+            items.add((k + 1) + ".  " + t);
+        }
+        ArrayAdapter<String> ad = new ArrayAdapter<String>(this,
+                android.R.layout.simple_list_item_1, items) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                tv.setTextColor(ids.get(position) == currentIndex ? ACCENT : TEXT);
+                tv.setTextSize(13);
+                tv.setPadding((int) dp(18), (int) dp(12), (int) dp(18), (int) dp(12));
+                tv.setSingleLine(true);
+                tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                return tv;
+            }
+        };
+        ListView lv = new ListView(this);
+        lv.setAdapter(ad);
+        lv.setBackgroundColor(CARD);
+        lv.setDivider(null);
+        lv.setDividerHeight(0);
+        lv.setCacheColorHint(0);
+
+        TextView title = new TextView(this);
+        title.setText("收藏 · 共 " + ids.size() + " 篇");
+        title.setTextColor(TEXT);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(4));
+
+        TextView hint = new TextView(this);
+        hint.setText("点开跳到那篇，长按移出收藏");
+        hint.setTextColor(0xFF6E6E78);
+        hint.setTextSize(11);
+        hint.setPadding((int) dp(20), 0, (int) dp(20), (int) dp(8));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.addView(title);
+        box.addView(hint);
+        box.addView(lv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(440)));
+
+        final AlertDialog[] holder = new AlertDialog[1];
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setNegativeButton("关闭", null)
+                .show();
+        holder[0] = dlg;
+        styleDialog(dlg);
+        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                jumpTo(ids.get(position));
+                if (holder[0] != null) holder[0].dismiss();
+            }
+        });
+        lv.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                set.remove(ids.get(position));
+                persistFavs();
+                if (holder[0] != null) holder[0].dismiss();
+                Toast.makeText(MainActivity.this, "已移出收藏", Toast.LENGTH_SHORT).show();
+                showFavs();
+                return true;
+            }
+        });
+    }
+
+    private void showIndex() {
+        final String[] pool = mode == 0 ? own : hot;
+        final String[] enPool = mode == 0 ? ownEn : hotEn;
+        if (pool.length == 0) return;
+        final List<Integer> ids = new ArrayList<Integer>();
+        final List<String> rows = new ArrayList<String>();
+        for (int i = 0; i < pool.length; i++) {
+            ids.add(i);
+            String t = pool[i].replace(String.valueOf((char) 10), " ").trim();
+            if (t.length() > 26) t = t.substring(0, 26) + "…";
+            rows.add((i + 1) + ".  " + t);
+        }
+        final ArrayAdapter<String> ad = new ArrayAdapter<String>(this,
+                android.R.layout.simple_list_item_1, rows) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                boolean cur = ids.get(position) == currentIndex;
+                tv.setTextColor(cur ? ACCENT : TEXT);
+                tv.setTypeface(Typeface.create("sans-serif", cur ? Typeface.BOLD : Typeface.NORMAL));
+                tv.setTextSize(13);
+                tv.setPadding((int) dp(18), (int) dp(12), (int) dp(18), (int) dp(12));
+                tv.setSingleLine(true);
+                tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                return tv;
+            }
+        };
+        ListView lv = new ListView(this);
+        lv.setAdapter(ad);
+        lv.setBackgroundColor(CARD);
+        lv.setDivider(null);
+        lv.setDividerHeight(0);
+        lv.setCacheColorHint(0);
+
+        EditText search = new EditText(this);
+        search.setHint("搜索中文或英文");
+        search.setSingleLine(true);
+        search.setTextColor(TEXT);
+        search.setHintTextColor(0xFF6E6E78);
+        search.setTextSize(14);
+        search.setBackgroundColor(0xFF1F1F26);
+        search.setPadding((int) dp(16), (int) dp(10), (int) dp(16), (int) dp(10));
+
+        TextView title = new TextView(this);
+        title.setText("目录 · 共 " + pool.length + " 篇");
+        title.setTextColor(TEXT);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+
+        TextView dlgTitle = title;
+        dlgTitle.setTextSize(17);
+
+        Button locate = new Button(this);
+        locate.setText("定位当前");
+        locate.setAllCaps(false);
+        locate.setTextSize(11);
+        locate.setTextColor(ACCENT);
+        locate.setPadding((int) dp(10), 0, (int) dp(10), 0);
+        locate.setMinWidth(0);
+        locate.setMinimumWidth(0);
+        locate.setMinHeight(0);
+        locate.setMinimumHeight(0);
+        locate.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        locate.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                int pos = ids.indexOf(currentIndex);
+                if (pos < 0) return;
+                int itemH = lv.getChildAt(0) != null ? lv.getChildAt(0).getHeight() : (int) dp(44);
+                int offset = Math.max(0, (lv.getHeight() - itemH) / 2);
+                lv.setSelectionFromTop(pos, offset);
+            }
+        });
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setPadding((int) dp(20), (int) dp(16), (int) dp(14), (int) dp(4));
+        titleRow.addView(dlgTitle, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams locLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        locLp.leftMargin = (int) dp(8);
+        titleRow.addView(locate, locLp);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.addView(titleRow);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.leftMargin = (int) dp(20);
+        slp.rightMargin = (int) dp(20);
+        slp.bottomMargin = (int) dp(8);
+        box.addView(search, slp);
+        box.addView(lv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(420)));
+
+        final AlertDialog[] holder = new AlertDialog[1];
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setNegativeButton("关闭", null)
+                .show();
+        holder[0] = dlg;
+        styleDialog(dlg);
+        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                jumpTo(ids.get(position));
+                if (holder[0] != null) holder[0].dismiss();
+            }
+        });
+
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+                String kw = s.toString().trim().toLowerCase();
+                ids.clear();
+                rows.clear();
+                for (int i = 0; i < pool.length; i++) {
+                    if (kw.length() == 0) {
+                        ids.add(i);
+                        String t = pool[i].replace(String.valueOf((char) 10), " ").trim();
+                        if (t.length() > 26) t = t.substring(0, 26) + "…";
+                        rows.add((i + 1) + ".  " + t);
+                        continue;
+                    }
+                    String en = i < enPool.length ? enPool[i].toLowerCase() : "";
+                    if (pool[i].contains(s.toString().trim()) || en.contains(kw)) {
+                        ids.add(i);
+                        String t = pool[i].replace(String.valueOf((char) 10), " ").trim();
+                        if (t.length() > 26) t = t.substring(0, 26) + "…";
+                        rows.add((i + 1) + ".  " + t);
+                    }
+                }
+                ad.notifyDataSetChanged();
+            }
+
+            public void afterTextChanged(android.text.Editable e) {
+            }
+        });
     }
 }

@@ -1,6 +1,6 @@
 # 每日一遍
 
-水泥封心文案 App：每天翻一篇，扎心但上头。包名 `com.lengroo.snfx`，当前版本 **v0.03**（versionCode 9）。
+水泥封心文案 App：每天翻一篇，扎心但上头。包名 `com.lengroo.snfx`，当前版本 **v0.04**（versionCode 16）。
 
 ## 功能
 
@@ -10,6 +10,12 @@
   - **随机模式**：纯随机，可以抽到之前出现过的（只避开正在显示的那一篇）
 - **中英对照**：每篇中文下面都带英文翻译，1465 篇原创 + 365 条热门全有英文
 - **自定义导入**：把你自己写的 txt 导进「当前所在的池子」，一行一篇
+- **目录**：卡片底部「目录 · N」打开当前池子全部条目，正在看的那条粉色加粗标出，右上角「定位当前」一键滚到正中；点任意一行直接跳到那篇，并计入已翻次数与已看记录。目录顶部有搜索框，按中文或英文译文实时过滤
+- **收藏**：卡片底部「收藏 · N」打开收藏列表，点开跳转，长按移出
+- **长按正文菜单**：复制 / 收藏（取消收藏）/ 分享成图
+- **分享成图**：1080×1920 深色卡片（中文 + 英文 + 品牌与作者水印），走系统分享面板
+- **导入管理**：「导入」弹窗下方「管理已导入」，列出当前池子里自己导入的全部条目，点开跳到那篇、长按删掉那一条、「清空全部」一键清空（二次确认）。删除时同步修正「已看 / 收藏」里的下标，不会错位
+- **关于彩蛋**：「关于」标题右侧有一颗「不要点我」小按钮，点开是一段较长的独白，文本在 `assets/nopoint.txt`，想换词直接改这个文件、重打包即可
 - **长按正文复制**，右上角「作者」看作者、版本与实时条数
 - 模式、已看记录、已翻次数都存在 SharedPreferences `dby`，重开 App 继续
 
@@ -50,7 +56,7 @@ python3 tools/merge_own.py   # 把 tools/import/*.txt 合并去重进 quotes.txt
 
 ## 技术
 
-- 纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库，单个 `MainActivity.java`
+- 纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库，`MainActivity.java`（1418 行）+ `ShareCard.java`（分享成图）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
 - minSdk 21 / targetSdk 33，`build.sh` 直接调 `javac` + `d8` + `aapt` + `zipalign` + `apksigner`
 - 深色界面：手写配色 + 圆角卡片 + 按压涟漪，换篇 180ms 淡入；标题与三个按钮同排，计数行单行省略，关于/导入弹窗统一深色卡片底 + 16dp 圆角 + 粉色主按钮
 
@@ -75,10 +81,13 @@ bash build.sh   # 产物 build/每日一遍.apk
 
 ```
 app/src/main/java/com/lengroo/snfx/MainActivity.java   # 全部界面与逻辑
+app/src/main/java/com/lengroo/snfx/ShareCard.java      # 分享成图：画 1080×1920 深色卡片
+app/src/main/java/com/lengroo/snfx/ShareProvider.java  # FileProvider，分享图片授权
 app/src/main/assets/quotes.txt   # 原创 1465 篇
 app/src/main/assets/quotes_en.txt  # 原创英文 1465 篇（按行号对应）
 app/src/main/assets/hot.txt      # 抖音热门 365 条
 app/src/main/assets/hot_en.txt   # 热门英文 365 条（按行号对应）
+app/src/main/assets/nopoint.txt  # 「不要点我」彩蛋独白
 app/src/main/res/mipmap-*/       # 五套启动图标（碎心图）
 tools/merge_own.py               # 合并去重 tools/import/*.txt → quotes.txt
 tools/gen_quotes.py              # 生成 365 篇组合文案 → quotes.txt
