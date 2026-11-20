@@ -1,0 +1,17 @@
+# Signing keystore (NOT in the repo — keep yours locally)
+keystore/
+keystore.properties
+
+# Build outputs
+build/
+*.apk
+*.idsig
+
+# Scraped source material (not committed; see README)
+tools/hot/
+tools/raw/
+
+# Local / IDE
+*.iml
+.local/
+.DS_Store
