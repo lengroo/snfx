@@ -43,12 +43,13 @@ public class MainActivity extends Activity {
 
     private static final String SEP = "\n@@@\n";
     private static final String AUTHOR = "lengroo错觉与风季一起吃薯条并看着李空壳打CF";
-    private static final int BG = 0xFF0B0B0D;
-    private static final int CARD = 0xFF15151A;
-    private static final int TEXT = 0xFFEDEAE6;
-    private static final int SUB = 0xFF6E6E78;
-    private static final int ACCENT = 0xFFFF5A7A;
-    private static final int LINE = 0xFF3A3A42;
+    private int BG = 0xFF0B0B0D;
+    private int CARD = 0xFF15151A;
+    private int TEXT = 0xFFEDEAE6;
+    private int SUB = 0xFF6E6E78;
+    private int ACCENT = 0xFFFF5A7A;
+    private int LINE = 0xFF3A3A42;
+    private int RIPPLE = 0x22FFFFFF;
 
     private String[] own = new String[0];
     private String[] hot = new String[0];
@@ -83,11 +84,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        try {
-            getWindow().setStatusBarColor(BG);
-            getWindow().setNavigationBarColor(BG);
-        } catch (Throwable ignored) {
-        }
+        applyTheme();
         prefs = getSharedPreferences("dby", MODE_PRIVATE);
         mode = prefs.getInt("mode", 0);
         randomMode = prefs.getBoolean("random_mode", false);
@@ -105,7 +102,53 @@ public class MainActivity extends Activity {
         reloadImported();
         rebuildPools();
         buildUi();
-        showNext();
+        if (savedInstanceState != null && savedInstanceState.containsKey("cur_idx")) {
+            String[] pool = mode == 0 ? own : hot;
+            int idx = savedInstanceState.getInt("cur_idx", 0);
+            if (pool.length > 0) {
+                currentIndex = Math.max(0, Math.min(idx, pool.length - 1));
+                renderIndex(currentIndex);
+            } else {
+                showNext();
+            }
+        } else {
+            showNext();
+        }
+    }
+
+    private void applyTheme() {
+        boolean night = (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        if (night) {
+            BG = 0xFF0B0B0D;
+            CARD = 0xFF15151A;
+            TEXT = 0xFFEDEAE6;
+            SUB = 0xFF6E6E78;
+            ACCENT = 0xFFFF5A7A;
+            LINE = 0xFF3A3A42;
+            RIPPLE = 0x22FFFFFF;
+        } else {
+            BG = 0xFFF4F4F7;
+            CARD = 0xFFFFFFFF;
+            TEXT = 0xFF17171B;
+            SUB = 0xFF6B6B76;
+            ACCENT = 0xFFD84069;
+            LINE = 0xFFE3E3EA;
+            RIPPLE = 0x22000000;
+        }
+        try {
+            getWindow().setStatusBarColor(BG);
+            getWindow().setNavigationBarColor(BG);
+            if (android.os.Build.VERSION.SDK_INT >= 23) {
+                View decor = getWindow().getDecorView();
+                int flags = decor.getSystemUiVisibility();
+                if (night) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                else flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                decor.setSystemUiVisibility(flags);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private float dp(float v) {
@@ -468,7 +511,7 @@ public class MainActivity extends Activity {
         modeBtn.setMinimumWidth(0);
         modeBtn.setMinHeight(0);
         modeBtn.setMinimumHeight(0);
-        modeBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        modeBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         modeBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 randomMode = !randomMode;
@@ -492,7 +535,7 @@ public class MainActivity extends Activity {
         about.setMinimumWidth(0);
         about.setMinHeight(0);
         about.setMinimumHeight(0);
-        about.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        about.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         about.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 showAbout();
@@ -513,7 +556,7 @@ public class MainActivity extends Activity {
         importer.setMinimumWidth(0);
         importer.setMinHeight(0);
         importer.setMinimumHeight(0);
-        importer.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        importer.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         importer.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 showImportHelp();
@@ -538,6 +581,26 @@ public class MainActivity extends Activity {
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
+        sv.setOnTouchListener(new View.OnTouchListener() {
+            float sx, sy;
+            long st;
+
+            public boolean onTouch(View v, android.view.MotionEvent e) {
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                    sx = e.getX();
+                    sy = e.getY();
+                    st = System.currentTimeMillis();
+                } else if (e.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
+                    float dx = e.getX() - sx;
+                    float dy = e.getY() - sy;
+                    if (Math.abs(dx) > dp(56) && Math.abs(dx) > Math.abs(dy) * 1.6f
+                            && System.currentTimeMillis() - st < 700) {
+                        showNext();
+                    }
+                }
+                return false;
+            }
+        });
         scroll = sv;
         body = new TextView(this);
         body.setTextColor(TEXT);
@@ -582,7 +645,7 @@ public class MainActivity extends Activity {
         favBtn.setMinimumWidth(0);
         favBtn.setMinHeight(0);
         favBtn.setMinimumHeight(0);
-        favBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        favBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         favBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 showFavs();
@@ -602,7 +665,7 @@ public class MainActivity extends Activity {
         indexBtn.setMinimumWidth(0);
         indexBtn.setMinHeight(0);
         indexBtn.setMinimumHeight(0);
-        indexBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        indexBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         indexBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 showIndex();
@@ -637,7 +700,7 @@ public class MainActivity extends Activity {
         toggle.setAllCaps(false);
         toggle.setTextSize(14);
         toggle.setTextColor(ACCENT);
-        toggle.setBackground(ripple(outline(0x00000000, LINE, dp(16)), 0x22FFFFFF));
+        toggle.setBackground(ripple(outline(0x00000000, LINE, dp(16)), RIPPLE));
         toggle.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 mode = 1 - mode;
@@ -682,7 +745,7 @@ public class MainActivity extends Activity {
         poke.setMinimumWidth(0);
         poke.setMinHeight(0);
         poke.setMinimumHeight(0);
-        poke.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        poke.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         poke.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 showSecret();
@@ -921,10 +984,29 @@ public class MainActivity extends Activity {
     }
 
     private void confirmClearImported() {
-        new AlertDialog.Builder(this)
-                .setTitle("清空导入的文案？")
-                .setMessage("会把当前池子里你自己导入的 "
-                        + (mode == 0 ? impOwn.length : impHot.length) + " 条全部删掉，内置文案不受影响。")
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.setPadding((int) dp(22), (int) dp(20), (int) dp(22), (int) dp(6));
+
+        TextView t = new TextView(this);
+        t.setText("清空导入的文案？");
+        t.setTextColor(TEXT);
+        t.setTextSize(17);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        box.addView(t);
+
+        TextView m = new TextView(this);
+        m.setText("会把当前池子里你自己导入的 "
+                + (mode == 0 ? impOwn.length : impHot.length) + " 条全部删掉，内置文案不受影响。");
+        m.setTextColor(SUB);
+        m.setTextSize(13);
+        m.setLineSpacing(dp(5), 1f);
+        m.setPadding(0, (int) dp(10), 0, 0);
+        box.addView(m);
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
                 .setPositiveButton("清空", new android.content.DialogInterface.OnClickListener() {
                     public void onClick(android.content.DialogInterface d, int w) {
                         clearImported();
@@ -932,6 +1014,7 @@ public class MainActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+        styleDialog(dlg);
     }
 
     private void showSecret() {
@@ -973,6 +1056,12 @@ public class MainActivity extends Activity {
                 .setPositiveButton("关闭", null)
                 .show();
         styleDialog(dlg);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt("cur_idx", currentIndex);
     }
 
     private void refreshLabels() {
@@ -1335,7 +1424,7 @@ public class MainActivity extends Activity {
         locate.setMinimumWidth(0);
         locate.setMinHeight(0);
         locate.setMinimumHeight(0);
-        locate.setBackground(ripple(outline(0x00000000, LINE, dp(14)), 0x22FFFFFF));
+        locate.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
         locate.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 int pos = ids.indexOf(currentIndex);
