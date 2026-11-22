@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_splash_vector">
+    <target android:name="scale_g" android:animation="@drawable/splash_scale" />
+    <target android:name="left_g" android:animation="@drawable/splash_left" />
+    <target android:name="right_g" android:animation="@drawable/splash_right" />
+    <target android:name="cover" android:animation="@drawable/splash_cover" />
+</animated-vector>

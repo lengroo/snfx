@@ -2,7 +2,7 @@
 
 水泥封心文案 App：每天翻一篇，扎心但上头。
 
-包名 `com.lengroo.snfx`，当前版本 **v0.05**（versionCode 27）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
+包名 `com.lengroo.snfx`，当前版本 **v0.05**（versionCode 43）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
 
 ## 这是什么
 
@@ -38,6 +38,7 @@
 ### 外观
 
 - **跟随系统深浅色**：系统切夜间模式时 App 自动重建并换配色。深色：底 #0B0B0D，卡片 #15151A，强调 #FF5A7A；浅色：底 #F4F4F7，卡片 #FFFFFF，强调 #D84069。状态栏图标随主题反色，涟漪颜色也随主题变
+- **启动屏**：Android 12+ 用系统启动屏 API，播一段矢量动画——一颗完整的心放大出现，再从中间裂开（`res/drawable/ic_splash_anim.xml`）；低版本走 `windowBackground` 的 layer-list，立刻就能看到图标，不会先闪空白
 - 顶栏：标题、模式按钮、作者、导入在同一条水平线上；进度行与池名行独立成两行，左对齐
 - 深色卡片 + 圆角 + 按压涟漪，换篇 180ms 淡入；关于 / 导入弹窗统一深色卡片底 + 16dp 圆角 + 粉色主按钮
 
@@ -89,14 +90,14 @@ python3 tools/merge_own.py   # 把 tools/import/*.txt 合并去重进 quotes.txt
 
 ## 技术
 
-- 纯 Java + 原生 View，`MainActivity.java`（1928 行，全部界面与逻辑）+ `ShareCard.java`（分享成图）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
+- 纯 Java + 原生 View，`MainActivity.java`（1933 行，全部界面与逻辑）+ `ShareCard.java`（分享成图）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
 - minSdk 21 / targetSdk 33；manifest 声明 `queries: android.intent.action.TTS_SERVICE`（Android 11+ 查得到语音引擎）
 - `build.sh` 直接调 `javac` + `d8` + `aapt` + `zipalign` + `apksigner`，不用 Gradle
 - 状态键（SharedPreferences `dby`）：`mode`、`random_mode`、`count_own`、`count_hot`、`seen_own`、`seen_hot`、`fav_own`、`fav_hot`、`speak_en`、`text_size`、`line_space`
 
 ## 构建
 
-前置：JDK 17、Android SDK（含 `platforms/android-23` 与 build-tools，`aapt` / `zipalign` / `apksigner` / `d8` 在 PATH 或 SDK 里）、`r8.jar`（没有 `d8` 时用）。
+前置：JDK 17、Android SDK（含 `platforms/android-34` 与 build-tools，`aapt` / `zipalign` / `apksigner` / `d8` 在 PATH 或 SDK 里）、`r8.jar`（没有 `d8` 时用）。
 
 签名用的 keystore **不在仓库里**（见 `.gitignore`），自己放一份到 `keystore/release.jks`，密码用环境变量或 `keystore.properties` 给：
 
@@ -122,7 +123,15 @@ app/src/main/assets/quotes_en.txt  # 原创英文 1465 篇（按行号对应）
 app/src/main/assets/hot.txt      # 抖音热门 365 条
 app/src/main/assets/hot_en.txt   # 热门英文 365 条（按行号对应）
 app/src/main/assets/nopoint.txt  # 「不要点我」彩蛋独白
+app/src/main/assets/heart_left.png / heart_right.png / icon_heart.png  # 启动动画迭代留下的心形位图（当前版本未引用）
 app/src/main/res/mipmap-*/       # 五套启动图标（碎心图）
+app/src/main/res/drawable/ic_splash_anim.xml  # 系统启动屏矢量动画（完整心 → 裂开）
+app/src/main/res/drawable/ic_splash_vector.xml splash_cover.xml splash_left.xml splash_right.xml splash_scale.xml  # 启动屏矢量与动画片段
+app/src/main/res/drawable/splash_window.xml  # windowBackground：纯色底 + 居中图标
+app/src/main/res/values/styles.xml  # SplashTheme（windowBackground）
+app/src/main/res/values-v31/styles.xml  # SplashTheme：系统启动屏（背景 / 矢量图标 / 450ms）
+app/src/main/res/values/colors.xml  # splash_bg 浅色 #F4F4F7
+app/src/main/res/values-night/colors.xml  # splash_bg 深色 #0B0B0D
 tools/merge_own.py               # 合并去重 tools/import/*.txt → quotes.txt
 tools/gen_quotes.py              # 生成 365 篇组合文案 → quotes.txt
 tools/extract_hot.py             # 从抓取的 markdown 里抽候选 → hot_pool.json
@@ -139,7 +148,7 @@ CHANGELOG.md                     # 从目录功能上线以来的版本更新日
 
 ## 更新日志
 
-版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.05 / code 27）。
+版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.05 / code 43）。
 
 ## 作者
 

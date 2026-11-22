@@ -116,6 +116,10 @@ public class MainActivity extends Activity {
         baseHotEn = load("hot_en.txt");
         reloadImported();
         rebuildPools();
+        startUi(savedInstanceState);
+    }
+
+    private void startUi(android.os.Bundle savedInstanceState) {
         buildUi();
         if (savedInstanceState != null && savedInstanceState.containsKey("cur_idx")) {
             String[] pool = mode == 0 ? own : hot;
@@ -130,6 +134,7 @@ public class MainActivity extends Activity {
             showNext();
         }
     }
+
 
     private void applyTheme() {
         boolean night = (getResources().getConfiguration().uiMode
