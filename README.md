@@ -59,7 +59,7 @@
 ### 分享与彩蛋
 
 - **长按正文菜单**：复制 / 收藏（取消收藏）/ 分享成图
-- **分享成图**：1080×1920 深色竖版卡片（中文 + 英文 + 品牌与作者水印），自建 ShareProvider 通过 `content://` 分享，不申请存储权限；分享图固定深色，不跟随主题
+- **分享成图**：1080×1920 深色杂志卡片（渐变底 + 右上角淡粉色光晕 + 细描边，顶部小心形与品牌字、右上角日期；正文衬线大字、行距宽松，左上角淡粉色大引号，整块文字垂直居中，太长自动缩小字号；正文与英文之间一条粉色短线，英文斜体灰字；底部细分隔线 + 品牌页脚），自建 ShareProvider 通过 `content://` 分享，不申请存储权限；分享图固定深色，不跟随主题
 - **彩蛋**：「关于」标题右侧有一颗「不要点我」小按钮，点开是一段约 1300 字的独白，五段排版，可滚动、可长按选中复制。文本在 `assets/nopoint.txt`，想换词直接改这个文件、重打包即可
 
 ## 导入 txt 的格式
@@ -129,7 +129,7 @@ app/src/main/java/com/lengroo/snfx/ThemeKit.java       # 配色（深浅两套�
 app/src/main/java/com/lengroo/snfx/QuoteRepo.java      # 文案池、已看/收藏、每日统计、安慰语
 app/src/main/java/com/lengroo/snfx/Dialogs.java        # 设置 / 回顾 / 停一下弹窗
 app/src/main/java/com/lengroo/snfx/Backup.java         # 备份导出 / 恢复（JSON）
-app/src/main/java/com/lengroo/snfx/ShareCard.java      # 分享成图：画 1080×1920 深色卡片
+app/src/main/java/com/lengroo/snfx/ShareCard.java      # 分享成图：画 1080×1920 深色杂志卡片
 app/src/main/java/com/lengroo/snfx/ShareProvider.java  # FileProvider，分享图片授权
 app/src/main/assets/quotes.txt   # 原创 1465 篇
 app/src/main/assets/quotes_en.txt  # 原创英文 1465 篇（按行号对应）
