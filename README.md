@@ -2,7 +2,7 @@
 
 水泥封心文案 App：每天翻一篇，扎心但上头。
 
-包名 `com.lengroo.snfx`，当前版本 **v0.05**（versionCode 43）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
+包名 `com.lengroo.snfx`，当前版本 **v0.05**（versionCode 53）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
 
 ## 这是什么
 
@@ -20,13 +20,22 @@
 - **目录**：卡片底部「目录 · N」打开当前池子全部条目，正在看的那条粉色加粗标出；标题右侧「定位当前」一键把它滚到列表正中；顶部搜索框按中文或英文译文实时过滤；点任意一行直接跳到那篇，并计入已翻次数与已看记录
 - **收藏**：卡片底部「收藏 · N」打开收藏列表，点开跳转，长按移出；收藏分池保存
 - **旋转不断篇**：旋转屏幕或切换深浅色后，停在原来那一篇
+- **每日一句**：顶栏「今日」按钮，同一天固定同一篇（按年×1000+年内第几天哈希取模）
+- **回顾**：顶栏「回顾」按钮，近 7 天每日翻篇数 + 收藏数 + 当前池进度 + 连续天数
+- **拼音搜索**：目录搜索栏输纯字母（如 `wdn`）按首字母匹配，中英文关键字仍走原文包含；首字母表在 `assets/pinyin.txt`
 
 ### 朗读
 
 - 卡片底部「朗读」按钮：用系统 TextToSpeech 念当前这篇，念的时候按钮变成粉色「停止」，点一下即停；念完自动变回「朗读」
 - 长按「朗读」选语言：中文（默认，语速 0.95）/ English（用英文译文念，语速 0.92），选择存在 `speak_en`，重开仍生效；没有英文译文时会提示
 - 翻页、离开页面、销毁时自动停止朗读并释放引擎
+- **连读模式**：设置里开关（默认关），念完 400ms 后自动换下一篇接着念
 - Android 11+ 需要包可见性声明，manifest 里已声明 `queries: android.intent.action.TTS_SERVICE`；语音引擎初始化失败时会弹窗引导去系统语音设置，或重试
+
+### 安慰语与设置
+
+- **安慰话**：每翻 10 篇弹一句安慰语（`assets/comfort.txt`，365 条），左按钮退出 App、右按钮继续；设置里可关（`comfort_on`）
+- **设置**：顶栏「设置」按钮，里面有安慰开关、连读开关、一键清空浏览记录（二次确认，收藏保留）、导出备份 / 从备份恢复（系统文件选择器，JSON 含收藏/已看/次数/设置/每日统计）
 
 ### 排版
 
@@ -90,10 +99,10 @@ python3 tools/merge_own.py   # 把 tools/import/*.txt 合并去重进 quotes.txt
 
 ## 技术
 
-- 纯 Java + 原生 View，`MainActivity.java`（1933 行，全部界面与逻辑）+ `ShareCard.java`（分享成图）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
+- 纯 Java + 原生 View，`MainActivity.java`（2200 行）+ `ThemeKit.java`（配色与工具）+ `QuoteRepo.java`（文案池、已看/收藏、每日统计、安慰语）+ `Dialogs.java`（设置/回顾/停一下弹窗）+ `Backup.java`（备份导出/恢复）+ `ShareCard.java`（分享成图）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
 - minSdk 21 / targetSdk 33；manifest 声明 `queries: android.intent.action.TTS_SERVICE`（Android 11+ 查得到语音引擎）
 - `build.sh` 直接调 `javac` + `d8` + `aapt` + `zipalign` + `apksigner`，不用 Gradle
-- 状态键（SharedPreferences `dby`）：`mode`、`random_mode`、`count_own`、`count_hot`、`seen_own`、`seen_hot`、`fav_own`、`fav_hot`、`speak_en`、`text_size`、`line_space`
+- 状态键（SharedPreferences `dby`）：`mode`、`random_mode`、`count_own`、`count_hot`、`seen_own`、`seen_hot`、`fav_own`、`fav_hot`、`speak_en`、`text_size`、`line_space`、`comfort_on`、`continuous`、`daily`
 
 ## 构建
 
@@ -115,13 +124,19 @@ bash build.sh   # 产物 build/每日一遍.apk
 ## 目录结构
 
 ```
-app/src/main/java/com/lengroo/snfx/MainActivity.java   # 全部界面与逻辑
+app/src/main/java/com/lengroo/snfx/MainActivity.java   # 主界面与逻辑（2200 行）
+app/src/main/java/com/lengroo/snfx/ThemeKit.java       # 配色（深浅两套）与界面工具
+app/src/main/java/com/lengroo/snfx/QuoteRepo.java      # 文案池、已看/收藏、每日统计、安慰语
+app/src/main/java/com/lengroo/snfx/Dialogs.java        # 设置 / 回顾 / 停一下弹窗
+app/src/main/java/com/lengroo/snfx/Backup.java         # 备份导出 / 恢复（JSON）
 app/src/main/java/com/lengroo/snfx/ShareCard.java      # 分享成图：画 1080×1920 深色卡片
 app/src/main/java/com/lengroo/snfx/ShareProvider.java  # FileProvider，分享图片授权
 app/src/main/assets/quotes.txt   # 原创 1465 篇
 app/src/main/assets/quotes_en.txt  # 原创英文 1465 篇（按行号对应）
 app/src/main/assets/hot.txt      # 抖音热门 365 条
 app/src/main/assets/hot_en.txt   # 热门英文 365 条（按行号对应）
+app/src/main/assets/comfort.txt  # 安慰语 365 条
+app/src/main/assets/pinyin.txt   # 拼音首字母表（供拼音搜索）
 app/src/main/assets/nopoint.txt  # 「不要点我」彩蛋独白
 app/src/main/assets/heart_left.png / heart_right.png / icon_heart.png  # 启动动画迭代留下的心形位图（当前版本未引用）
 app/src/main/res/mipmap-*/       # 五套启动图标（碎心图）
@@ -148,7 +163,7 @@ CHANGELOG.md                     # 从目录功能上线以来的版本更新日
 
 ## 更新日志
 
-版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.05 / code 43）。
+版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.05 / code 53）。
 
 ## 作者
 

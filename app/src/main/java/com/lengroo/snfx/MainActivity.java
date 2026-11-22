@@ -83,7 +83,19 @@ public class MainActivity extends Activity {
     private boolean ttsReady = false;
     private boolean speakingNow = false;
     private boolean speakEnglish = false;
+    private boolean continuousActive = false;
+    private boolean loadedOwn = false;
+    private boolean loadedHot = false;
+    private static final int REQ_BACKUP_EXPORT = 1002;
+    private static final int REQ_BACKUP_IMPORT = 1003;
     private int textSizeLevel = 1;
+    private int FIELD;
+    private int HINT;
+    private int flipStreak = 0;
+    private Button todayBtn;
+    private java.util.Map<Character, String> pyMap;
+    private String[] pyCacheOwn;
+    private String[] pyCacheHot;
     private int lineLevel = 1;
     private Button typeBtn;
     private AlertDialog typeDialog;
@@ -110,10 +122,7 @@ public class MainActivity extends Activity {
         lineLevel = prefs.getInt("line_space", 1);
         readSeen("seen_hot", seenHot);
 
-        baseOwn = load("quotes.txt");
-        baseHot = load("hot.txt");
-        baseOwnEn = load("quotes_en.txt");
-        baseHotEn = load("hot_en.txt");
+        ensurePools(mode);
         reloadImported();
         rebuildPools();
         startUi(savedInstanceState);
@@ -137,26 +146,17 @@ public class MainActivity extends Activity {
 
 
     private void applyTheme() {
-        boolean night = (getResources().getConfiguration().uiMode
-                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
-                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
-        if (night) {
-            BG = 0xFF0B0B0D;
-            CARD = 0xFF15151A;
-            TEXT = 0xFFEDEAE6;
-            SUB = 0xFF6E6E78;
-            ACCENT = 0xFFFF5A7A;
-            LINE = 0xFF3A3A42;
-            RIPPLE = 0x22FFFFFF;
-        } else {
-            BG = 0xFFF4F4F7;
-            CARD = 0xFFFFFFFF;
-            TEXT = 0xFF17171B;
-            SUB = 0xFF6B6B76;
-            ACCENT = 0xFFD84069;
-            LINE = 0xFFE3E3EA;
-            RIPPLE = 0x22000000;
-        }
+        ThemeKit.configure(this);
+        boolean night = ThemeKit.isNight(this);
+        BG = ThemeKit.BG;
+        CARD = ThemeKit.CARD;
+        TEXT = ThemeKit.TEXT;
+        SUB = ThemeKit.SUB;
+        ACCENT = ThemeKit.ACCENT;
+        LINE = ThemeKit.LINE;
+        RIPPLE = ThemeKit.RIPPLE;
+        FIELD = ThemeKit.FIELD;
+        HINT = ThemeKit.HINT;
         try {
             getWindow().setStatusBarColor(BG);
             getWindow().setNavigationBarColor(BG);
@@ -172,68 +172,33 @@ public class MainActivity extends Activity {
     }
 
     private float dp(float v) {
-        return v * getResources().getDisplayMetrics().density;
+        return ThemeKit.dp(v);
     }
 
     private String[] load(String name) {
-        InputStream in = null;
-        try {
-            in = getAssets().open(name);
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
-            String all = new String(bos.toByteArray(), "UTF-8").trim();
-            if (all.length() > 0) return all.split(SEP);
-        } catch (Throwable t) {
-            return new String[0];
-        } finally {
-            if (in != null) try { in.close(); } catch (Throwable ignored) {}
-        }
-        return new String[0];
+        return QuoteRepo.load(this, name);
     }
 
     private void readSeen(String key, Set<Integer> into) {
-        into.clear();
-        String s = prefs.getString(key, "");
-        if (s.length() == 0) return;
-        String[] parts = s.split(",");
-        for (int i = 0; i < parts.length; i++) {
-            try {
-                into.add(Integer.parseInt(parts[i].trim()));
-            } catch (Throwable ignored) {
-            }
-        }
+        QuoteRepo.readSeen(prefs, key, into);
     }
 
     private String writeSeen(Set<Integer> set) {
-        StringBuilder sb = new StringBuilder();
-        for (Integer v : set) {
-            if (sb.length() > 0) sb.append(',');
-            sb.append(v.intValue());
-        }
-        return sb.toString();
+        return QuoteRepo.writeSeen(set);
     }
 
     private GradientDrawable round(int color, float radius) {
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(color);
-        g.setCornerRadius(radius);
-        return g;
+        return ThemeKit.round(color, radius);
     }
 
     private GradientDrawable outline(int fill, int stroke, float radius) {
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(fill);
-        g.setCornerRadius(radius);
-        g.setStroke((int) Math.max(1f, dp(1f)), stroke);
-        return g;
+        return ThemeKit.outline(fill, stroke, radius);
     }
 
     // Gives a button press feedback: a Material ripple over the same shape.
     // A bare GradientDrawable has no pressed state, so buttons felt dead.
     private Drawable ripple(Drawable content, int color) {
-        return new RippleDrawable(ColorStateList.valueOf(color), content, null);
+        return ThemeKit.ripple(content, color);
     }
 
     private static String[] concat(String[] a, String[] b) {
@@ -267,6 +232,18 @@ public class MainActivity extends Activity {
             return all.split(SEP);
         } catch (Throwable t) {
             return new String[0];
+        }
+    }
+
+    private void ensurePools(int m) {
+        if (m == 0 && !loadedOwn) {
+            baseOwn = load("quotes.txt");
+            baseOwnEn = load("quotes_en.txt");
+            loadedOwn = true;
+        } else if (m == 1 && !loadedHot) {
+            baseHot = load("hot.txt");
+            baseHotEn = load("hot_en.txt");
+            loadedHot = true;
         }
     }
 
@@ -331,6 +308,9 @@ public class MainActivity extends Activity {
                 cz.add(srcZ[i]);
                 ce.add(i < srcE.length ? srcE[i] : "");
             }
+            ensurePools(0);
+            ensurePools(1);
+            rebuildPools();
             Set<String> have = new HashSet<String>();
             for (String z : own) have.add(z.trim());
             for (String z : hot) have.add(z.trim());
@@ -369,6 +349,14 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_IMPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
             importFromUri(data.getData());
+        }
+        if (requestCode == REQ_BACKUP_EXPORT && resultCode == RESULT_OK && data != null
+                && data.getData() != null) {
+            writeBackupTo(data.getData());
+        }
+        if (requestCode == REQ_BACKUP_IMPORT && resultCode == RESULT_OK && data != null
+                && data.getData() != null) {
+            readBackupFrom(data.getData());
         }
     }
 
@@ -449,19 +437,7 @@ public class MainActivity extends Activity {
     }
 
     private void styleDialog(AlertDialog d) {
-        try {
-            if (d.getWindow() != null) {
-                d.getWindow().setBackgroundDrawable(new android.graphics.drawable.InsetDrawable(
-                        round(CARD, dp(18)), (int) dp(6)));
-            }
-            Button ok = d.getButton(AlertDialog.BUTTON_POSITIVE);
-            if (ok != null) ok.setTextColor(ACCENT);
-            Button no = d.getButton(AlertDialog.BUTTON_NEGATIVE);
-            if (no != null) no.setTextColor(SUB);
-            Button mid = d.getButton(AlertDialog.BUTTON_NEUTRAL);
-            if (mid != null) mid.setTextColor(ACCENT);
-        } catch (Throwable ignored) {
-        }
+        ThemeKit.styleDialog(d);
     }
 
     private void buildUi() {
@@ -478,7 +454,11 @@ public class MainActivity extends Activity {
         TextView title = new TextView(this);
         title.setText("每日一遍");
         title.setTextColor(TEXT);
-        title.setTextSize(24);
+        title.setTextSize(22);
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            title.setAutoSizeTextTypeUniformWithConfiguration(15, 22, 1,
+                    android.util.TypedValue.COMPLEX_UNIT_SP);
+        }
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
 
         LinearLayout titleRow = new LinearLayout(this);
@@ -490,7 +470,7 @@ public class MainActivity extends Activity {
         modeBtn.setAllCaps(false);
         modeBtn.setTextSize(11);
         modeBtn.setTextColor(ACCENT);
-        modeBtn.setPadding((int) dp(10), 0, (int) dp(10), 0);
+        modeBtn.setPadding((int) dp(8), 0, (int) dp(8), 0);
         modeBtn.setMinWidth(0);
         modeBtn.setMinimumWidth(0);
         modeBtn.setMinHeight(0);
@@ -506,19 +486,80 @@ public class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        mlp.leftMargin = (int) dp(12);
+        mlp.leftMargin = (int) dp(8);
         titleRow.addView(modeBtn, mlp);
+
+        todayBtn = new Button(this);
+        todayBtn.setText("今日");
+        todayBtn.setAllCaps(false);
+        todayBtn.setTextSize(11);
+        todayBtn.setTextColor(SUB);
+        todayBtn.setPadding((int) dp(8), 0, (int) dp(8), 0);
+        todayBtn.setMinWidth(0);
+        todayBtn.setMinimumWidth(0);
+        todayBtn.setMinHeight(0);
+        todayBtn.setMinimumHeight(0);
+        todayBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
+        todayBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showToday();
+            }
+        });
+        LinearLayout.LayoutParams tdLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        tdLp.leftMargin = (int) dp(6);
+        titleRow.addView(todayBtn, tdLp);
+
+        Button reviewBtn = new Button(this);
+        reviewBtn.setText("回顾");
+        reviewBtn.setAllCaps(false);
+        reviewBtn.setTextSize(11);
+        reviewBtn.setTextColor(SUB);
+        reviewBtn.setPadding((int) dp(8), 0, (int) dp(8), 0);
+        reviewBtn.setMinWidth(0);
+        reviewBtn.setMinimumWidth(0);
+        reviewBtn.setMinHeight(0);
+        reviewBtn.setMinimumHeight(0);
+        reviewBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
+        reviewBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showReview();
+            }
+        });
+        LinearLayout.LayoutParams rvLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
+        rvLp.leftMargin = (int) dp(6);
+        titleRow.addView(reviewBtn, rvLp);
 
         LinearLayout topButtons = new LinearLayout(this);
         topButtons.setOrientation(LinearLayout.HORIZONTAL);
         topButtons.setGravity(Gravity.CENTER_VERTICAL);
 
+        Button settings = new Button(this);
+        settings.setText("设置");
+        settings.setAllCaps(false);
+        settings.setTextSize(10);
+        settings.setTextColor(SUB);
+        settings.setPadding((int) dp(9), 0, (int) dp(9), 0);
+        settings.setMinWidth(0);
+        settings.setMinimumWidth(0);
+        settings.setMinHeight(0);
+        settings.setMinimumHeight(0);
+        settings.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
+        settings.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showSettings();
+            }
+        });
+        topButtons.addView(settings, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28)));
+
         Button about = new Button(this);
         about.setText("作者");
         about.setAllCaps(false);
-        about.setTextSize(11);
+        about.setTextSize(10);
         about.setTextColor(SUB);
-        about.setPadding((int) dp(12), 0, (int) dp(12), 0);
+        about.setPadding((int) dp(9), 0, (int) dp(9), 0);
         about.setMinWidth(0);
         about.setMinimumWidth(0);
         about.setMinHeight(0);
@@ -531,15 +572,15 @@ public class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        alp.leftMargin = (int) dp(8);
+        alp.leftMargin = (int) dp(6);
         topButtons.addView(about, alp);
 
         Button importer = new Button(this);
         importer.setText("导入");
         importer.setAllCaps(false);
-        importer.setTextSize(11);
+        importer.setTextSize(10);
         importer.setTextColor(SUB);
-        importer.setPadding((int) dp(12), 0, (int) dp(12), 0);
+        importer.setPadding((int) dp(9), 0, (int) dp(9), 0);
         importer.setMinWidth(0);
         importer.setMinimumWidth(0);
         importer.setMinHeight(0);
@@ -552,7 +593,7 @@ public class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        ilp.leftMargin = (int) dp(8);
+        ilp.leftMargin = (int) dp(6);
         topButtons.addView(importer, ilp);
 
         headerRow.addView(titleRow, new LinearLayout.LayoutParams(0,
@@ -769,6 +810,8 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 mode = 1 - mode;
                 prefs.edit().putInt("mode", mode).apply();
+                ensurePools(mode);
+                rebuildPools();
                 refreshLabels();
                 showNext();
             }
@@ -1229,6 +1272,12 @@ public class MainActivity extends Activity {
 
         pushHistory(idx);
         renderIndex(idx);
+        recordFlip();
+        flipStreak++;
+        if (flipStreak >= 10) {
+            flipStreak = 0;
+            if (prefs.getBoolean("comfort_on", true)) showComfort();
+        }
     }
 
     private void pushHistory(int idx) {
@@ -1285,6 +1334,21 @@ public class MainActivity extends Activity {
                                 public void run() {
                                     speakingNow = false;
                                     updateSpeakLabel();
+                                    if (continuousActive && prefs.getBoolean("continuous", false)) {
+                                        final android.os.Handler h = new android.os.Handler(
+                                                android.os.Looper.getMainLooper());
+                                        h.postDelayed(new Runnable() {
+                                            public void run() {
+                                                if (!continuousActive) return;
+                                                showNext();
+                                                h.postDelayed(new Runnable() {
+                                                    public void run() {
+                                                        if (continuousActive && !speakingNow) toggleSpeak();
+                                                    }
+                                                }, 600);
+                                            }
+                                        }, 400);
+                                    }
                                 }
                             });
                         }
@@ -1508,6 +1572,7 @@ public class MainActivity extends Activity {
         }
         tts.setSpeechRate(speakEnglish ? 0.92f : 0.95f);
         speakingNow = true;
+        continuousActive = true;
         updateSpeakLabel();
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "snfx");
         Toast.makeText(this, "朗读中（" + (speakEnglish ? "英文" : "中文") + "）· 点底部「停止」可结束",
@@ -1562,6 +1627,7 @@ public class MainActivity extends Activity {
 
     private void stopSpeak() {
         speakingNow = false;
+        continuousActive = false;
         updateSpeakLabel();
         if (tts != null) tts.stop();
     }
@@ -1627,6 +1693,27 @@ public class MainActivity extends Activity {
                 .putString("seen_hot", writeSeen(seenHot)).apply();
         pushHistory(idx);
         renderIndex(idx);
+        recordFlip();
+    }
+
+    SharedPreferences prefs() {
+        return prefs;
+    }
+
+    int favCount() {
+        return favOwn.size() + favHot.size();
+    }
+
+    int seenCount() {
+        return (mode == 0 ? seenOwn : seenHot).size();
+    }
+
+    int poolLength() {
+        return (mode == 0 ? own : hot).length;
+    }
+
+    void exitApp() {
+        finishAffinity();
     }
 
     private Set<Integer> favSet() {
@@ -1788,6 +1875,179 @@ public class MainActivity extends Activity {
         });
     }
 
+    private String dayKey() {
+        return QuoteRepo.dayKey();
+    }
+
+    private void showToday() {
+        String[] pool = mode == 0 ? own : hot;
+        if (pool.length == 0) return;
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        long seed = c.get(java.util.Calendar.YEAR) * 1000L + c.get(java.util.Calendar.DAY_OF_YEAR);
+        int idx = (int) Math.abs((seed * 2654435761L) % pool.length);
+        jumpTo(idx % pool.length);
+        Toast.makeText(this, "今天就看这一篇", Toast.LENGTH_SHORT).show();
+    }
+
+    private void recordFlip() {
+        QuoteRepo.recordFlip(prefs);
+    }
+
+    private int dailyCount(String key) {
+        return QuoteRepo.dailyCount(prefs, key);
+    }
+
+    private String[] loadComfort() {
+        return QuoteRepo.loadComfort(this);
+    }
+
+    private void showComfort() {
+        Dialogs.showComfort(this);
+    }
+
+    private void showSettings() {
+        Dialogs.showSettings(this);
+    }
+
+    private void showReview() {
+        Dialogs.showReview(this);
+    }
+
+    private void loadPy() {
+        if (pyMap != null) return;
+        pyMap = new java.util.HashMap<Character, String>();
+        try {
+            java.io.InputStream in = getAssets().open("pinyin.txt");
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(in, "UTF-8"));
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.length() >= 3) pyMap.put(line.charAt(0), line.substring(2, 3));
+            }
+            br.close();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private String initialsOf(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch >= 'a' && ch <= 'z') sb.append(ch);
+            else if (ch >= 'A' && ch <= 'Z') sb.append((char) (ch + 32));
+            else if (ch >= 0x4e00 && ch <= 0x9fff) {
+                String p = pyMap == null ? null : pyMap.get(ch);
+                if (p != null) sb.append(p);
+            }
+        }
+        return sb.toString();
+    }
+
+    private String[] pyCache() {
+        loadPy();
+        if (mode == 0) {
+            if (pyCacheOwn == null) {
+                pyCacheOwn = new String[own.length];
+                for (int i = 0; i < own.length; i++) pyCacheOwn[i] = initialsOf(own[i]);
+            }
+            return pyCacheOwn;
+        }
+        if (pyCacheHot == null) {
+            pyCacheHot = new String[hot.length];
+            for (int i = 0; i < hot.length; i++) pyCacheHot[i] = initialsOf(hot[i]);
+        }
+        return pyCacheHot;
+    }
+
+    void clearHistory() {
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("清空浏览记录？")
+                .setMessage("已看、已翻次数、每日统计都会归零，收藏保留。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("清空", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        seenOwn.clear();
+                        seenHot.clear();
+                        countOwn = 0;
+                        countHot = 0;
+                        flipStreak = 0;
+                        prefs.edit().putInt("count_own", 0).putInt("count_hot", 0)
+                                .putString("seen_own", "").putString("seen_hot", "")
+                                .putString("daily", "").apply();
+                        refreshLabels();
+                        showNext();
+                        Toast.makeText(MainActivity.this, "记录已清空", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
+        styleDialog(dlg);
+    }
+
+    void exportBackup() {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/json");
+        i.putExtra(Intent.EXTRA_TITLE, "meiriyibian-backup.json");
+        try {
+            startActivityForResult(i, REQ_BACKUP_EXPORT);
+        } catch (Throwable t) {
+            Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    void importBackup() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        try {
+            startActivityForResult(i, REQ_BACKUP_IMPORT);
+        } catch (Throwable t) {
+            Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void writeBackupTo(Uri uri) {
+        try {
+            java.io.OutputStream out = getContentResolver().openOutputStream(uri);
+            String json = Backup.toJson(prefs, seenOwn, seenHot, favOwn, favHot);
+            out.write(json.getBytes("UTF-8"));
+            out.flush();
+            out.close();
+            Toast.makeText(this, "备份已导出", Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "导出失败：" + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void readBackupFrom(Uri uri) {
+        try {
+            InputStream in = getContentResolver().openInputStream(uri);
+            String json = readAll(in);
+            in.close();
+            SharedPreferences.Editor ed = prefs.edit();
+            if (!Backup.apply(json, ed, seenOwn, seenHot, favOwn, favHot)) {
+                Toast.makeText(this, "这个文件不是本应用的备份", Toast.LENGTH_LONG).show();
+                return;
+            }
+            mode = prefs.getInt("mode", 0);
+            countOwn = prefs.getInt("count_own", 0);
+            countHot = prefs.getInt("count_hot", 0);
+            speakEnglish = prefs.getBoolean("speak_en", false);
+            textSizeLevel = prefs.getInt("text_size", 1);
+            lineLevel = prefs.getInt("line_space", 1);
+            ensurePools(mode);
+            rebuildPools();
+            currentIndex = Math.min(currentIndex, Math.max(0, (mode == 0 ? own : hot).length - 1));
+            applyTypography();
+            refreshLabels();
+            renderIndex(currentIndex);
+            Toast.makeText(this, "备份已恢复", Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "恢复失败：" + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void showIndex() {
         final String[] pool = mode == 0 ? own : hot;
         final String[] enPool = mode == 0 ? ownEn : hotEn;
@@ -1823,12 +2083,13 @@ public class MainActivity extends Activity {
         lv.setCacheColorHint(0);
 
         EditText search = new EditText(this);
-        search.setHint("搜索中文或英文");
+        search.setHint("搜索中文 / 英文 / 拼音首字母");
         search.setSingleLine(true);
         search.setTextColor(TEXT);
-        search.setHintTextColor(0xFF6E6E78);
+
         search.setTextSize(14);
-        search.setBackgroundColor(0xFF1F1F26);
+        search.setBackground(round(FIELD, dp(12)));
+        search.setHintTextColor(HINT);
         search.setPadding((int) dp(16), (int) dp(10), (int) dp(16), (int) dp(10));
 
         TextView title = new TextView(this);
@@ -1905,6 +2166,8 @@ public class MainActivity extends Activity {
 
             public void onTextChanged(CharSequence s, int a, int b, int c) {
                 String kw = s.toString().trim().toLowerCase();
+                boolean pyQuery = kw.length() > 0 && kw.matches("[a-z]+");
+                String[] pyArr = pyQuery ? pyCache() : null;
                 ids.clear();
                 rows.clear();
                 for (int i = 0; i < pool.length; i++) {
@@ -1916,7 +2179,11 @@ public class MainActivity extends Activity {
                         continue;
                     }
                     String en = i < enPool.length ? enPool[i].toLowerCase() : "";
-                    if (pool[i].contains(s.toString().trim()) || en.contains(kw)) {
+                    boolean hit = pool[i].contains(s.toString().trim()) || en.contains(kw);
+                    if (!hit && pyQuery) {
+                        hit = pyArr != null && i < pyArr.length && pyArr[i].contains(kw);
+                    }
+                    if (hit) {
                         ids.add(i);
                         String t = pool[i].replace(String.valueOf((char) 10), " ").trim();
                         if (t.length() > 26) t = t.substring(0, 26) + "…";
