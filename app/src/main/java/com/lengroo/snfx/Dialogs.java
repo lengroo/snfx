@@ -83,6 +83,85 @@ public final class Dialogs {
         });
         box.addView(cont);
 
+        final CheckBox rem = new CheckBox(a);
+        rem.setText("每天定时提醒我看今日一句");
+        rem.setTextSize(14);
+        rem.setTextColor(ThemeKit.TEXT);
+        rem.setChecked(a.prefs().getBoolean("reminder_on", false));
+        rem.setButtonTintList(android.content.res.ColorStateList.valueOf(ThemeKit.ACCENT));
+        rem.setPadding(0, (int) dp(6), 0, (int) dp(4));
+        rem.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton b, boolean on) {
+                a.setReminder(on, rem);
+            }
+        });
+        box.addView(rem);
+
+        final TextView remTime = new TextView(a);
+        remTime.setText("提醒时间 " + a.reminderTimeStr());
+        remTime.setTextColor(ThemeKit.TEXT);
+        remTime.setTextSize(14);
+        remTime.setGravity(Gravity.CENTER_VERTICAL);
+        remTime.setPadding((int) dp(4), (int) dp(12), (int) dp(4), (int) dp(12));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rlp.bottomMargin = (int) dp(6);
+        remTime.setLayoutParams(rlp);
+        remTime.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                int h = a.prefs().getInt("reminder_hour", 22);
+                int m = a.prefs().getInt("reminder_min", 0);
+                new android.app.TimePickerDialog(a,
+                        new android.app.TimePickerDialog.OnTimeSetListener() {
+                            public void onTimeSet(android.widget.TimePicker p, int hour, int min) {
+                                a.prefs().edit().putInt("reminder_hour", hour)
+                                        .putInt("reminder_min", min).apply();
+                                remTime.setText("提醒时间 " + a.reminderTimeStr());
+                                if (a.prefs().getBoolean("reminder_on", false)) {
+                                    ReminderReceiver.schedule(a);
+                                }
+                                Toast.makeText(a, "提醒时间改成 " + a.reminderTimeStr(),
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        }, h, m, true).show();
+            }
+        });
+        box.addView(remTime);
+
+        final TextView themeRow = row(a, "外观：" + a.themeModeName(
+                a.prefs().getInt("theme_mode", ThemeKit.THEME_SYSTEM)),
+                new View.OnClickListener() {
+            public void onClick(View v) {
+                final AlertDialog[] holder = new AlertDialog[1];
+                LinearLayout tbox = new LinearLayout(a);
+                tbox.setOrientation(LinearLayout.VERTICAL);
+                String[] names = {"跟随系统", "深色", "浅色"};
+                final int cur = a.prefs().getInt("theme_mode", ThemeKit.THEME_SYSTEM);
+                for (int k = 0; k < names.length; k++) {
+                    final int mode = k;
+                    TextView r = new TextView(a);
+                    r.setText(names[k] + (mode == cur ? "  ✓" : ""));
+                    r.setTextColor(mode == cur ? ThemeKit.ACCENT : ThemeKit.TEXT);
+                    r.setTextSize(15);
+                    r.setPadding((int) dp(24), (int) dp(18), (int) dp(24), (int) dp(18));
+                    r.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View v) {
+                            if (holder[0] != null) holder[0].dismiss();
+                            a.setThemeMode(mode);
+                        }
+                    });
+                    tbox.addView(r);
+                }
+                AlertDialog dlg = new AlertDialog.Builder(a)
+                        .setView(tbox)
+                        .setNegativeButton("取消", null)
+                        .show();
+                holder[0] = dlg;
+                ThemeKit.styleDialog(dlg);
+            }
+        });
+        box.addView(themeRow);
+
         TextView tip = new TextView(a);
         tip.setText("关掉安慰话后，翻多少篇都不会打断你。");
         tip.setTextColor(ThemeKit.SUB);
@@ -116,7 +195,8 @@ public final class Dialogs {
     public static void showReview(final MainActivity a) {
         java.util.Calendar c = java.util.Calendar.getInstance();
         int week = 0;
-        StringBuilder rows = new StringBuilder();
+        int[] counts = new int[7];
+        String[] labels = new String[7];
         String[] names = new String[]{"日", "一", "二", "三", "四", "五", "六"};
         // daily 只解析一次：7 天 + 连续天数共用这一个 Map。
         java.util.LinkedHashMap<String, Integer> daily = QuoteRepo.dailyMap(a.prefs());
@@ -127,8 +207,8 @@ public final class Dialogs {
             Integer v = daily.get(key);
             int n = v == null ? 0 : v.intValue();
             week += n;
-            rows.append(i == 0 ? "今天" : "周" + names[d.get(java.util.Calendar.DAY_OF_WEEK) - 1]);
-            rows.append("  ").append(n).append(" 篇").append((char) 10);
+            counts[6 - i] = n;
+            labels[6 - i] = i == 0 ? "今天" : "周" + names[d.get(java.util.Calendar.DAY_OF_WEEK) - 1];
         }
 
         LinearLayout box = new LinearLayout(a);
@@ -150,12 +230,12 @@ public final class Dialogs {
         sum.setPadding(0, (int) dp(10), 0, (int) dp(8));
         box.addView(sum);
 
-        TextView detail = new TextView(a);
-        detail.setText(rows.toString());
-        detail.setTextColor(ThemeKit.SUB);
-        detail.setTextSize(12);
-        detail.setLineSpacing(dp(4), 1f);
-        box.addView(detail);
+        WeekChartView chart = new WeekChartView(a, counts, labels);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) dp(148));
+        clp.topMargin = (int) dp(6);
+        chart.setLayoutParams(clp);
+        box.addView(chart);
 
         TextView foot = new TextView(a);
         foot.setText("收藏 " + a.favCount() + " 篇 · 当前池已看 "

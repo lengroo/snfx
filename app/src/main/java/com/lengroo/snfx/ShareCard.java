@@ -20,13 +20,14 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 把一篇文案渲染成 1080x1920 的分享图，两套模板。
+ * 把一篇文案渲染成 1080x1920 的分享图，九套模板。
  *
- * 版式（两套共用）：顶部一颗小心形 + 间距拉开的品牌字，右边日期；正文是衬线大字、
+ * 版式（九套共用）：顶部一颗小心形 + 间距拉开的品牌字，右边日期；正文是衬线大字、
  * 行距宽松，整块文字在卡片里垂直居中；正文后一条短线，再接英文译文；
  * 底部分隔线 + 品牌页脚。外圈一根细描边。
  * 深色杂志：纵向渐变深底 + 右上角淡粉色光晕。
  * 浅色纸感：暖米色纸底 + 右上角淡玫红光晕，墨色正文。
+ * 红橙黄绿蓝靛紫：同色系渐变底 + 淡色光晕，白色正文（黄色用墨色正文）。
  */
 public final class ShareCard {
 
@@ -34,6 +35,20 @@ public final class ShareCard {
     public static final int TEMPLATE_DARK = 0;
     /** 模板：浅色纸感。 */
     public static final int TEMPLATE_LIGHT = 1;
+    /** 模板：红。 */
+    public static final int TEMPLATE_RED = 2;
+    /** 模板：橙。 */
+    public static final int TEMPLATE_ORANGE = 3;
+    /** 模板：黄。 */
+    public static final int TEMPLATE_YELLOW = 4;
+    /** 模板：绿。 */
+    public static final int TEMPLATE_GREEN = 5;
+    /** 模板：蓝。 */
+    public static final int TEMPLATE_BLUE = 6;
+    /** 模板：靛。 */
+    public static final int TEMPLATE_INDIGO = 7;
+    /** 模板：紫。 */
+    public static final int TEMPLATE_VIOLET = 8;
 
     private static final int W = 1080;
     private static final int H = 1920;
@@ -80,6 +95,70 @@ public final class ShareCard {
             0xFF241F19, 0xFF3A342C, 0xFF8A8175, // 正文墨色 / 品牌深褐 / 英文页脚暖灰
             0xFFD84069, 0x2ED84069);            // 点缀玫红 / 大引号玫红 18%
 
+    // 彩虹七色：同色系渐变底 + 淡色光晕，白色正文（黄色太亮，用墨色正文）。
+    private static final Palette RED = new Palette(
+            0xFFD94A4A, 0xFFB02020,
+            0xFFFF8A80, 30,
+            0x2EFFFFFF, 0x33FFFFFF,
+            0xFFFFFFFF, 0xFFF5E6E6, 0xFFD9B8B8,
+            0xFFFFFFFF, 0x3DFFFFFF);
+
+    private static final Palette ORANGE = new Palette(
+            0xFFF08C46, 0xFFDD5E00,
+            0xFFFFCC80, 30,
+            0x2EFFFFFF, 0x33FFFFFF,
+            0xFFFFFFFF, 0xFFFFF0E0, 0xFFE8C4A8,
+            0xFFFFFFFF, 0x3DFFFFFF);
+
+    private static final Palette YELLOW = new Palette(
+            0xFFF6C945, 0xFFE8A90C,
+            0xFFFFF176, 28,
+            0x1A000000, 0x1F000000,
+            0xFF241F19, 0xFF3A342C, 0xFF7A6A2A,
+            0xFF8A6D00, 0x2E8A6D00);
+
+    private static final Palette GREEN = new Palette(
+            0xFF5CAF78, 0xFF2E7D46,
+            0xFFA5D6A7, 30,
+            0x2EFFFFFF, 0x33FFFFFF,
+            0xFFFFFFFF, 0xFFE8F5E9, 0xFFB7D9BE,
+            0xFFFFFFFF, 0x3DFFFFFF);
+
+    private static final Palette BLUE = new Palette(
+            0xFF5B8DEF, 0xFF1565C0,
+            0xFF90CAF9, 30,
+            0x2EFFFFFF, 0x33FFFFFF,
+            0xFFFFFFFF, 0xFFE3F2FD, 0xFFB8D0F0,
+            0xFFFFFFFF, 0x3DFFFFFF);
+
+    private static final Palette INDIGO = new Palette(
+            0xFF6C72DC, 0xFF3949AB,
+            0xFF9FA8DA, 30,
+            0x2EFFFFFF, 0x33FFFFFF,
+            0xFFFFFFFF, 0xFFE8EAF6, 0xFFB9C0E8,
+            0xFFFFFFFF, 0x3DFFFFFF);
+
+    private static final Palette VIOLET = new Palette(
+            0xFF9B6BD6, 0xFF6A1B9A,
+            0xFFCE93D8, 30,
+            0x2EFFFFFF, 0x33FFFFFF,
+            0xFFFFFFFF, 0xFFF3E5F5, 0xFFD0B4DE,
+            0xFFFFFFFF, 0x3DFFFFFF);
+
+    private static Palette paletteFor(int template) {
+        switch (template) {
+            case TEMPLATE_LIGHT: return LIGHT;
+            case TEMPLATE_RED: return RED;
+            case TEMPLATE_ORANGE: return ORANGE;
+            case TEMPLATE_YELLOW: return YELLOW;
+            case TEMPLATE_GREEN: return GREEN;
+            case TEMPLATE_BLUE: return BLUE;
+            case TEMPLATE_INDIGO: return INDIGO;
+            case TEMPLATE_VIOLET: return VIOLET;
+            default: return DARK;
+        }
+    }
+
     private ShareCard() {
     }
 
@@ -89,7 +168,7 @@ public final class ShareCard {
     }
 
     public static File render(File dir, String zh, String en, String footer, int template) throws Exception {
-        Palette p = template == TEMPLATE_LIGHT ? LIGHT : DARK;
+        Palette p = paletteFor(template);
         Bitmap bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
 

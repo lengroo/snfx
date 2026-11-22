@@ -1,6 +1,6 @@
 # 每日一遍 · 更新日志
 
-从「目录」功能上线（versionCode 10）到现在（versionCode 57）。
+从「目录」功能上线（versionCode 10）到现在（versionCode 59）。
 版本名在 code 17→18 时由 0.04 升到 0.05，code 55 时升到 0.06，只递进 versionCode。
 
 ## 2026-11-18　v0.04（code 10）— 目录上线
@@ -210,3 +210,13 @@
 - ShareCard 支持两套模板：深色杂志（TEMPLATE_DARK）/ 浅色纸感（TEMPLATE_LIGHT），render() 多一个 template 参数
 - 分享时长按「分享成图」先选模板，选择存 prefs 的 share_template，下次默认上次用的
 - 浅色模板：米白纸底 + 深墨字 + 淡粉点缀，适合白天发；深色模板保持原来的夜色感
+
+## 2026-11-23　v0.06（code 58）— 七色分享模板 + 周视图 + 定时提醒
+- 分享模板扩到九套：深色杂志 / 浅色纸感 / 红 / 橙 / 黄 / 绿 / 蓝 / 靛 / 紫，选择记在 prefs 的 share_template
+- 新增 WeekChartView：回顾页把近 7 天翻篇数画成柱状图（Dialogs 里直接构造）
+- 新增 ReminderReceiver + 通知/精确闹钟/开机自启权限：到点发一条本地提醒，重启后仍能恢复
+
+## 2026-11-23　v0.06（code 59）— 外观可手动切换
+- ThemeKit 增加 THEME_SYSTEM / THEME_DARK / THEME_LIGHT 与 configure(Context, mode)
+- 设置里新增「外观」一行：跟随系统 / 深色 / 浅色，选择存 prefs 的 theme_mode，切换后立即重建界面
+- MainActivity 暴露 setThemeMode / themeModeName，供设置弹窗调用

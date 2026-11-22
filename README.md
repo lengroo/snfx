@@ -2,7 +2,7 @@
 
 水泥封心文案 App：每天翻一篇，扎心但上头。
 
-包名 `com.lengroo.snfx`，当前版本 **v0.06**（versionCode 57）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
+包名 `com.lengroo.snfx`，当前版本 **v0.06**（versionCode 59）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
 
 ## 这是什么
 
@@ -16,12 +16,13 @@
 
 - **两个文案池**：原创长文案（默认）/ 抖音热门，底部按钮切换
 - **两种模式**（标题栏）：默认模式抽过的不再抽到，看完一整轮自动重开一轮；随机模式纯随机（只避开正在显示的那一篇）
-- **滑动换篇**：卡片上左滑换下一篇，右滑回到上一句。历史栈最多 200 条，目录跳转也会进历史
+- **滑动换篇**：卡片上左滑换下一篇，右滑回到上一句。历史栈最多 200 条，目录跳转也会进历史。换篇时正文淡入 + 从滑动方向轻滑进来（220 毫秒）
 - **目录**：卡片底部「目录 · N」打开当前池子全部条目，正在看的那条粉色加粗标出；标题右侧「定位当前」一键把它滚到列表正中；顶部搜索框按中文或英文译文实时过滤；点任意一行直接跳到那篇，并计入已翻次数与已看记录
 - **收藏**：卡片底部「收藏 · N」打开收藏列表，点开跳转，长按移出；收藏分池保存
 - **旋转不断篇**：旋转屏幕或切换深浅色后，停在原来那一篇
 - **每日一句**：顶栏「今日」按钮，同一天固定同一篇（按年×1000+年内第几天哈希取模）
-- **回顾**：顶栏「回顾」按钮，近 7 天每日翻篇数 + 收藏数 + 当前池进度 + 连续天数
+- **回顾**：顶栏「回顾」按钮，近 7 天每日翻篇数画成小柱状图（今天那根是粉色）+ 收藏数 + 当前池进度 + 连续天数
+- **定时提醒**：设置里开，每天到点（默认 22:00）推一条今日一句，点开进 App；重启手机后提醒还在
 - **拼音搜索**：目录搜索栏输纯字母（如 `wdn`）按首字母匹配，中英文关键字仍走原文包含；首字母表在 `assets/pinyin.txt`
 
 ### 朗读
@@ -46,7 +47,7 @@
 
 ### 外观
 
-- **跟随系统深浅色**：系统切夜间模式时 App 自动重建并换配色。深色：底 #0B0B0D，卡片 #15151A，强调 #FF5A7A；浅色：底 #F4F4F7，卡片 #FFFFFF，强调 #D84069。状态栏图标随主题反色，涟漪颜色也随主题变
+- **深浅色**：默认跟随系统，设置里也可以手动选深色或浅色。深色：底 #0B0B0D，卡片 #15151A，强调 #FF5A7A；浅色：底 #F4F4F7，卡片 #FFFFFF，强调 #D84069。状态栏图标随主题反色，涟漪颜色也随主题变
 - **启动屏**：Android 12+ 用系统启动屏 API，播一段矢量动画——一颗完整的心放大出现，再从中间裂开（`res/drawable/ic_splash_anim.xml`）；低版本走 `windowBackground` 的 layer-list，立刻就能看到图标，不会先闪空白
 - 顶栏：标题、模式按钮、作者、导入在同一条水平线上；进度行与池名行独立成两行，左对齐
 - 深色卡片 + 圆角 + 按压涟漪，换篇 180ms 淡入；关于 / 导入弹窗统一深色卡片底 + 16dp 圆角 + 粉色主按钮
@@ -59,7 +60,7 @@
 ### 分享与彩蛋
 
 - **长按正文菜单**：复制 / 收藏（取消收藏）/ 分享成图
-- **分享成图**：1080×1920 深色杂志卡片（渐变底 + 右上角淡粉色光晕 + 细描边，顶部小心形与品牌字、右上角日期；正文衬线大字、行距宽松，左上角淡粉色大引号，整块文字垂直居中，太长自动缩小字号；正文与英文之间一条粉色短线，英文斜体灰字；底部细分隔线 + 品牌页脚），另有浅色纸感模板（米白纸底 + 深墨字 + 玫瑰点缀），分享时二选一，上次的选择会被记住；自建 ShareProvider 通过 `content://` 分享，不申请存储权限；分享图不跟随主题
+- **分享成图**：1080×1920 深色杂志卡片（渐变底 + 右上角淡粉色光晕 + 细描边，顶部小心形与品牌字、右上角日期；正文衬线大字、行距宽松，左上角淡粉色大引号，整块文字垂直居中，太长自动缩小字号；正文与英文之间一条粉色短线，英文斜体灰字；底部细分隔线 + 品牌页脚），另有浅色纸感模板（米白纸底 + 深墨字 + 玫瑰点缀）和红橙黄绿蓝靛紫七色模板（同色系渐变底 + 淡色光晕），分享时九选一，上次的选择会被记住；自建 ShareProvider 通过 `content://` 分享，不申请存储权限；分享图不跟随主题
 - **彩蛋**：「关于」标题右侧有一颗「不要点我」小按钮，点开是一段约 1300 字的独白，五段排版，可滚动、可长按选中复制。文本在 `assets/nopoint.txt`，想换词直接改这个文件、重打包即可
 
 ## 导入 txt 的格式
@@ -99,7 +100,7 @@ python3 tools/merge_own.py   # 把 tools/import/*.txt 合并去重进 quotes.txt
 
 ## 技术
 
-- 纯 Java + 原生 View，`MainActivity.java`（2231 行）+ `ThemeKit.java`（配色与工具）+ `QuoteRepo.java`（文案池、已看/收藏、每日统计、安慰语）+ `Dialogs.java`（设置/回顾/停一下弹窗）+ `Backup.java`（备份导出/恢复）+ `ShareCard.java`（分享成图，两套模板）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
+- 纯 Java + 原生 View，`MainActivity.java`（2311 行）+ `ThemeKit.java`（配色与工具）+ `QuoteRepo.java`（文案池、已看/收藏、每日统计、安慰语）+ `Dialogs.java`（设置/回顾/停一下弹窗）+ `Backup.java`（备份导出/恢复）+ `ShareCard.java`（分享成图，九套模板）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
 - minSdk 21 / targetSdk 33；manifest 声明 `queries: android.intent.action.TTS_SERVICE`（Android 11+ 查得到语音引擎）
 - `build.sh` 直接调 `javac` + `d8` + `aapt` + `zipalign` + `apksigner`，不用 Gradle
 - 状态键（SharedPreferences `dby`）：`mode`、`random_mode`、`count_own`、`count_hot`、`seen_own`、`seen_hot`、`fav_own`、`fav_hot`、`speak_en`、`text_size`、`line_space`、`comfort_on`、`continuous`、`daily`
@@ -124,12 +125,14 @@ bash build.sh   # 产物 build/每日一遍.apk
 ## 目录结构
 
 ```
-app/src/main/java/com/lengroo/snfx/MainActivity.java   # 主界面与逻辑（2200 行）
+app/src/main/java/com/lengroo/snfx/MainActivity.java   # 主界面与逻辑（2311 行）
 app/src/main/java/com/lengroo/snfx/ThemeKit.java       # 配色（深浅两套）与界面工具
 app/src/main/java/com/lengroo/snfx/QuoteRepo.java      # 文案池、已看/收藏、每日统计、安慰语
 app/src/main/java/com/lengroo/snfx/Dialogs.java        # 设置 / 回顾 / 停一下弹窗
+app/src/main/java/com/lengroo/snfx/WeekChartView.java  # 回顾弹窗里的 7 天柱状图
+app/src/main/java/com/lengroo/snfx/ReminderReceiver.java  # 每天定时提醒
 app/src/main/java/com/lengroo/snfx/Backup.java         # 备份导出 / 恢复（JSON）
-app/src/main/java/com/lengroo/snfx/ShareCard.java      # 分享成图：画 1080×1920 卡片，两套模板（深色杂志 / 浅色纸感）
+app/src/main/java/com/lengroo/snfx/ShareCard.java      # 分享成图：画 1080×1920 卡片，九套模板（深色杂志 / 浅色纸感 / 红橙黄绿蓝靛紫）
 app/src/main/java/com/lengroo/snfx/ShareProvider.java  # FileProvider，分享图片授权
 app/src/main/assets/quotes.txt   # 原创 1465 篇
 app/src/main/assets/quotes_en.txt  # 原创英文 1465 篇（按行号对应）
@@ -163,7 +166,7 @@ CHANGELOG.md                     # 从目录功能上线以来的版本更新日
 
 ## 更新日志
 
-版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.06 / code 57）。
+版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.06 / code 59）。
 
 ## 作者
 

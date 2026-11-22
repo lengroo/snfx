@@ -20,6 +20,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.EditText;
 import android.widget.ListView;
@@ -127,6 +128,8 @@ public class MainActivity extends Activity {
         reloadImported();
         rebuildPools();
         startUi(savedInstanceState);
+        // 提醒开着的话，把闹钟重新约一遍（重启 / 强行停止后闹钟会丢）。
+        if (prefs.getBoolean("reminder_on", false)) ReminderReceiver.schedule(this);
     }
 
     private void startUi(android.os.Bundle savedInstanceState) {
@@ -147,7 +150,9 @@ public class MainActivity extends Activity {
 
 
     private void applyTheme() {
-        ThemeKit.configure(this);
+        int mode = getSharedPreferences("dby", MODE_PRIVATE)
+                .getInt("theme_mode", ThemeKit.THEME_SYSTEM);
+        ThemeKit.configure(this, mode);
         boolean night = ThemeKit.isNight(this);
         BG = ThemeKit.BG;
         CARD = ThemeKit.CARD;
@@ -1277,7 +1282,7 @@ public class MainActivity extends Activity {
         ed.apply();
 
         pushHistory(idx);
-        renderIndex(idx);
+        renderIndex(idx, 1);
         flipStreak++;
         if (flipStreak >= 10) {
             flipStreak = 0;
@@ -1303,7 +1308,7 @@ public class MainActivity extends Activity {
             return;
         }
         currentIndex = prev;
-        renderIndex(prev);
+        renderIndex(prev, -1);
     }
 
     private void toggleSpeak() {
@@ -1645,6 +1650,11 @@ public class MainActivity extends Activity {
     }
 
     private void renderIndex(int idx) {
+        renderIndex(idx, 0);
+    }
+
+    /** 翻篇：dir = 1 往前翻（内容从右滑进来），-1 往回翻（从左滑进来），0 不滑动。 */
+    private void renderIndex(int idx, int dir) {
         if (speakingNow) stopSpeak();
         currentIndex = idx;
         String[] pool = mode == 0 ? own : hot;
@@ -1660,11 +1670,15 @@ public class MainActivity extends Activity {
                 }
             });
         }
+        // 淡入 + 轻滑：先退到 24dp 外、透明，再滑回来。
+        float fromX = dir == 0 ? 0f : dir * dp(24);
         body.setAlpha(0f);
-        body.animate().alpha(1f).setDuration(180).start();
+        body.setTranslationX(fromX);
+        body.animate().alpha(1f).translationX(0f).setDuration(220).start();
         if (trans != null) {
             trans.setAlpha(0f);
-            trans.animate().alpha(1f).setDuration(180).start();
+            trans.setTranslationX(fromX);
+            trans.animate().alpha(1f).translationX(0f).setDuration(220).start();
         }
         String seenInfo;
         if (randomMode) {
@@ -1700,7 +1714,7 @@ public class MainActivity extends Activity {
         QuoteRepo.recordFlipInto(prefs, ed);
         ed.apply();
         pushHistory(idx);
-        renderIndex(idx);
+        renderIndex(idx, 1);
     }
 
     SharedPreferences prefs() {
@@ -1789,7 +1803,7 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         final AlertDialog[] holder = new AlertDialog[1];
-        String[] names = {"深色杂志", "浅色纸感"};
+        String[] names = {"深色杂志", "浅色纸感", "红", "橙", "黄", "绿", "蓝", "靛", "紫"};
         for (int k = 0; k < names.length; k++) {
             final int template = k;
             TextView row = new TextView(this);
@@ -1807,7 +1821,9 @@ public class MainActivity extends Activity {
             box.addView(row);
         }
         AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(box)
+                .setView(new android.widget.ScrollView(this) {{
+                    addView(box);
+                }})
                 .setNegativeButton("取消", null)
                 .show();
         holder[0] = dlg;
@@ -1940,8 +1956,72 @@ public class MainActivity extends Activity {
         Dialogs.showSettings(this);
     }
 
+    public String themeModeName(int mode) {
+        return mode == ThemeKit.THEME_DARK ? "深色"
+                : mode == ThemeKit.THEME_LIGHT ? "浅色" : "跟随系统";
+    }
+
+    /** 手动换主题：存下来，重建界面（当前篇会保留）。 */
+    public void setThemeMode(int mode) {
+        prefs.edit().putInt("theme_mode", mode).apply();
+        Toast.makeText(this, "已切换到" + themeModeName(mode), Toast.LENGTH_SHORT).show();
+        recreate();
+    }
+
     private void showReview() {
         Dialogs.showReview(this);
+    }
+
+    private static final int REQ_REMINDER_NOTIF = 1001;
+    private CheckBox pendingReminderBox;
+    private boolean suppressReminderCb;
+
+    /** 定时提醒的开关：开要通知权限，没给就先申请，决定等回调。 */
+    public void setReminder(boolean on, CheckBox cb) {
+        if (suppressReminderCb) return;
+        if (!on) {
+            prefs.edit().putBoolean("reminder_on", false).apply();
+            ReminderReceiver.cancel(this);
+            Toast.makeText(this, "已关闭定时提醒", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            pendingReminderBox = cb;
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
+                    REQ_REMINDER_NOTIF);
+            return;
+        }
+        prefs.edit().putBoolean("reminder_on", true).apply();
+        ReminderReceiver.schedule(this);
+        Toast.makeText(this, "已开启：每天 " + reminderTimeStr() + " 提醒你看今日一句",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    public String reminderTimeStr() {
+        return String.format(Locale.CHINA, "%02d:%02d",
+                prefs.getInt("reminder_hour", 22), prefs.getInt("reminder_min", 0));
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_REMINDER_NOTIF) return;
+        CheckBox cb = pendingReminderBox;
+        pendingReminderBox = null;
+        if (grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // 勾已经打上了，不用再碰它，直接约闹钟
+            setReminder(true, cb);
+        } else {
+            // 编程式取消勾选，不走开关流程
+            suppressReminderCb = true;
+            if (cb != null) cb.setChecked(false);
+            suppressReminderCb = false;
+            Toast.makeText(this, "没给通知权限就推不了，去系统设置里打开通知",
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     private void loadPy() {

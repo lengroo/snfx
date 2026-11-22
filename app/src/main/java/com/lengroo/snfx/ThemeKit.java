@@ -13,6 +13,11 @@ import android.widget.Button;
 /** 配色与绘制工具：一套深浅两色，所有界面元素都从这里取值。 */
 public final class ThemeKit {
 
+    /** 主题模式：跟随系统 / 深色 / 浅色。 */
+    public static final int THEME_SYSTEM = 0;
+    public static final int THEME_DARK = 1;
+    public static final int THEME_LIGHT = 2;
+
     public static int BG, CARD, TEXT, SUB, ACCENT, LINE, FIELD, HINT, RIPPLE;
 
     private static float density = 3f;
@@ -26,8 +31,14 @@ public final class ThemeKit {
     }
 
     public static void configure(Context c) {
+        configure(c, THEME_SYSTEM);
+    }
+
+    public static void configure(Context c, int mode) {
         density = c.getResources().getDisplayMetrics().density;
-        if (isNight(c)) {
+        boolean night = mode == THEME_DARK ? true
+                : mode == THEME_LIGHT ? false : isNight(c);
+        if (night) {
             BG = 0xFF0B0B0D;
             CARD = 0xFF15151A;
             TEXT = 0xFFEDEAE6;
