@@ -118,12 +118,14 @@ public final class Dialogs {
         int week = 0;
         StringBuilder rows = new StringBuilder();
         String[] names = new String[]{"日", "一", "二", "三", "四", "五", "六"};
+        // daily 只解析一次：7 天 + 连续天数共用这一个 Map。
+        java.util.LinkedHashMap<String, Integer> daily = QuoteRepo.dailyMap(a.prefs());
         for (int i = 6; i >= 0; i--) {
             java.util.Calendar d = (java.util.Calendar) c.clone();
             d.add(java.util.Calendar.DAY_OF_YEAR, -i);
-            String key = String.format("%04d%02d%02d", d.get(java.util.Calendar.YEAR),
-                    d.get(java.util.Calendar.MONTH) + 1, d.get(java.util.Calendar.DAY_OF_MONTH));
-            int n = QuoteRepo.dailyCount(a.prefs(), key);
+            String key = QuoteRepo.dayKey(d);
+            Integer v = daily.get(key);
+            int n = v == null ? 0 : v.intValue();
             week += n;
             rows.append(i == 0 ? "今天" : "周" + names[d.get(java.util.Calendar.DAY_OF_WEEK) - 1]);
             rows.append("  ").append(n).append(" 篇").append((char) 10);
@@ -142,7 +144,7 @@ public final class Dialogs {
         box.addView(t);
 
         TextView sum = new TextView(a);
-        sum.setText("近 7 天翻了 " + week + " 篇 · 连续 " + QuoteRepo.streak(a.prefs()) + " 天");
+        sum.setText("近 7 天翻了 " + week + " 篇 · 连续 " + QuoteRepo.streak(daily) + " 天");
         sum.setTextColor(ThemeKit.ACCENT);
         sum.setTextSize(15);
         sum.setPadding(0, (int) dp(10), 0, (int) dp(8));

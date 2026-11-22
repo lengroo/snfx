@@ -90,11 +90,21 @@ public final class ShareCard {
         drawFooter(c, footer);
 
         File out = new File(dir, "share.png");
-        FileOutputStream fos = new FileOutputStream(out);
-        bmp.compress(Bitmap.CompressFormat.PNG, 100, fos);
-        fos.close();
-        bmp.recycle();
-        return out;
+        FileOutputStream fos = null;
+        try {
+            fos = new FileOutputStream(out);
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, fos);
+            fos.flush();
+            return out;
+        } finally {
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (Throwable ignored) {
+                }
+            }
+            bmp.recycle();
+        }
     }
 
     /** 纵向渐变底 + 右上角一团淡粉色光晕。 */

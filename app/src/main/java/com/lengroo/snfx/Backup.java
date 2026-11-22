@@ -38,7 +38,7 @@ public final class Backup {
             o.put("seenHot", arr(seenHot));
             o.put("favOwn", arr(favOwn));
             o.put("favHot", arr(favHot));
-            return o.toString(2);
+            return o.toString();
         } catch (Throwable t) {
             return "";
         }

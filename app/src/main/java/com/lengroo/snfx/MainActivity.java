@@ -88,6 +88,7 @@ public class MainActivity extends Activity {
     private boolean loadedHot = false;
     private static final int REQ_BACKUP_EXPORT = 1002;
     private static final int REQ_BACKUP_IMPORT = 1003;
+    private static final Random RNG = new Random();
     private int textSizeLevel = 1;
     private int FIELD;
     private int HINT;
@@ -259,6 +260,9 @@ public class MainActivity extends Activity {
         ownEn = concat(baseOwnEn, impOwnEn);
         hot = concat(baseHot, impHot);
         hotEn = concat(baseHotEn, impHotEn);
+        // 池子变了，拼音首字母缓存就过期了（导入/删除后下标会错位），下次搜索再重建。
+        pyCacheOwn = null;
+        pyCacheHot = null;
     }
 
     private void writeCustom(String name, List<String> list) throws Exception {
@@ -1222,7 +1226,7 @@ public class MainActivity extends Activity {
             counter.setText("0 / 0");
             return;
         }
-        Random r = new Random(System.nanoTime());
+        Random r = RNG;
         int idx;
         if (randomMode) {
             idx = r.nextInt(pool.length);
@@ -1268,11 +1272,12 @@ public class MainActivity extends Activity {
                 .putInt("count_hot", countHot);
         if (mode == 0) ed.putString("seen_own", writeSeen(seenOwn));
         else ed.putString("seen_hot", writeSeen(seenHot));
+        // 今天的翻篇数也写进同一个 Editor，一次落盘。
+        QuoteRepo.recordFlipInto(prefs, ed);
         ed.apply();
 
         pushHistory(idx);
         renderIndex(idx);
-        recordFlip();
         flipStreak++;
         if (flipStreak >= 10) {
             flipStreak = 0;
@@ -1688,12 +1693,14 @@ public class MainActivity extends Activity {
             lastHot = idx;
             countHot++;
         }
-        prefs.edit().putInt("count_own", countOwn).putInt("count_hot", countHot)
+        SharedPreferences.Editor ed = prefs.edit()
+                .putInt("count_own", countOwn).putInt("count_hot", countHot)
                 .putString("seen_own", writeSeen(seenOwn))
-                .putString("seen_hot", writeSeen(seenHot)).apply();
+                .putString("seen_hot", writeSeen(seenHot));
+        QuoteRepo.recordFlipInto(prefs, ed);
+        ed.apply();
         pushHistory(idx);
         renderIndex(idx);
-        recordFlip();
     }
 
     SharedPreferences prefs() {
@@ -1887,14 +1894,6 @@ public class MainActivity extends Activity {
         int idx = (int) Math.abs((seed * 2654435761L) % pool.length);
         jumpTo(idx % pool.length);
         Toast.makeText(this, "今天就看这一篇", Toast.LENGTH_SHORT).show();
-    }
-
-    private void recordFlip() {
-        QuoteRepo.recordFlip(prefs);
-    }
-
-    private int dailyCount(String key) {
-        return QuoteRepo.dailyCount(prefs, key);
     }
 
     private String[] loadComfort() {
