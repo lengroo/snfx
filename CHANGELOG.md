@@ -1,7 +1,7 @@
 # 每日一遍 · 更新日志
 
-从「目录」功能上线（versionCode 10）到现在（versionCode 53）。
-版本名在 code 17→18 时由 0.04 升到 0.05，之后一直沿用 0.05，只递进 versionCode。
+从「目录」功能上线（versionCode 10）到现在（versionCode 55）。
+版本名在 code 17→18 时由 0.04 升到 0.05，code 55 时升到 0.06，只递进 versionCode。
 
 ## 2026-11-18　v0.04（code 10）— 目录上线
 - 卡片底部新增「目录 · N」按钮，点开是当前池子的全部条目列表（ListView，可滑动）
@@ -43,7 +43,7 @@
 - 历史栈（最多 200 条）：左滑换下一句，右滑回到上一句；目录跳转也进历史
 - 长按菜单新增朗读（系统 TextToSpeech，中文，语速 0.95）
 - 翻页 / 离开页面 / 销毁自动停止朗读并释放引擎
-- 版本名升为 0.05
+- 版本名升为 0.06
 
 ## 2026-11-20　v0.05（code 19）— 朗读修复
 - 修复「语音引擎初始化失败」：Android 11+ 包可见性导致查不到 TTS_SERVICE，manifest 补 <queries>
@@ -91,22 +91,21 @@
 - 动画改成「两半合拢 → 向外滑开」：同一张图左右各画一次、按中线裁剪，位移从 5.5% 收到 0，最后停在图标原样
 - 素材 106 KB，整包 346 KB
 
-## 2026-11-22　v0.05（code 30）— 抄 Nagram 的启动屏写法
-- 逆向 Nagram v13.2.2：它用 Android 12 系统启动屏 API，在 res/values-v31/styles.xml 里声明
+## 2026-11-22　v0.05（code 30）— 接入系统启动屏
+- 新增 SplashTheme（values + values-v31），用 Android 12 的系统启动屏 API：
   windowSplashScreenBackground / windowSplashScreenAnimatedIcon / windowSplashScreenAnimationDuration=450
-- 动画本体是 animated-vector + objectAnimator(propertyName=pathData, valueType=pathType)，把飞机图标从点「长」出来
-- 我们照同样结构实现：新增 SplashTheme（values + values-v31），启动屏图标用 @mipmap/ic_launcher、时长 450ms、背景 #0B0B0D
+- 启动屏图标用 @mipmap/ic_launcher，背景 #0B0B0D，时长 450ms
 - 构建脚本改用 API34 的 android.jar（API23 的 jar 里没有这些属性）
-- 自绘的「两半滑开」遮罩仍保留，所以 12+ 也能看到裂开那一幕
+- App 内自绘遮罩仍保留，低版本也能看到完整的启动画面
 
 ## 2026-11-22　v0.05（code 31）— 启动屏底色跟随主题
 - splash_bg 拆成 values / values-night 两套：#F4F4F7 / #0B0B0D，系统启动屏不再先闪一下深色
 - 构建换用 Android 14（API34）android.jar，compileSdk 随之变成 34
 
-## 2026-11-22　v0.05（code 33）— 启动图标改成矢量（抄 Nagram 的 animated-vector）
+## 2026-11-22　v0.05（code 33）— 启动图标改为矢量动画
 - 用 potrace 把图标轮廓描成矢量路径（512×512，312 个曲线点），不再手绘
 - 新增 res/drawable/ic_splash_vector.xml（外层 0.78 缩放防系统裁切）、splash_scale.xml（scaleX/scaleY 0.35→1，450ms，fast_out_slow_in）、ic_splash_anim.xml（animated-vector）
-- windowSplashScreenAnimatedIcon 指向 @drawable/ic_splash_anim，和 Nagram 一模一样的注册方式
+- windowSplashScreenAnimatedIcon 指向 @drawable/ic_splash_anim
 - Android 12+ 交给系统播这段矢量动画；低版本仍用自绘的缩放缓入遮罩（不再有「两半滑开」）
 
 ## 2026-11-22　v0.05（code 34→35）— 修启动矢量
@@ -191,3 +190,11 @@
 ## 2026-11-22　v0.05（code 53）— 「回顾」移到顶栏
 - 回顾按钮从目录弹窗搬到标题行，紧跟「今日」右侧
 - 标题改为自适应字号（15–22sp，API 26+），窄屏自动缩小，一行放下六个元素
+
+## 2026-11-22　v0.05（code 54）— 同步新版分享卡片
+- ShareCard.java 换成用户提供的「深色杂志」版（397 行）：渐变背景 + 粉色光晕、细描边、居中排版、粉色短线分节、底部品牌与日期
+- 对外接口未变：render(File dir, String zh, String en, String footer)，MainActivity 调用点无需改动
+
+## 2026-11-22　v0.06（code 55）— 版本号升级
+- versionName 0.05 → 0.06，versionCode 54 → 55
+- 首个 0.06 包含：今日、回顾、停一下（365 条）、拼音搜索、连读、清空记录、连续天数、懒加载、备份、新版分享卡片

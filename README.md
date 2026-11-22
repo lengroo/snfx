@@ -2,7 +2,7 @@
 
 水泥封心文案 App：每天翻一篇，扎心但上头。
 
-包名 `com.lengroo.snfx`，当前版本 **v0.05**（versionCode 53）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
+包名 `com.lengroo.snfx`，当前版本 **v0.06**（versionCode 55）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
 
 ## 这是什么
 
@@ -163,7 +163,7 @@ CHANGELOG.md                     # 从目录功能上线以来的版本更新日
 
 ## 更新日志
 
-版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.05 / code 53）。
+版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.06 / code 55）。
 
 ## 作者
 
