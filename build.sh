@@ -38,7 +38,11 @@ rm -rf "$B" && mkdir -p "$B/classes" "$B/dex"
 echo "[1/6] javac"
 find "$PJ/app/src/main/java" -name '*.java' > "$B/srcs.txt"
 "$JB/javac" -nowarn -source 8 -target 8 -bootclasspath "$AJ" \
-  -encoding UTF-8 -d "$B/classes" @"$B/srcs.txt" 2>&1 | grep -v 'bootstrap class path' || true
+  -encoding UTF-8 -d "$B/classes" @"$B/srcs.txt" > "$B/javac.log" 2>&1 || {
+  grep -v 'bootstrap class path' "$B/javac.log" | tail -30
+  echo "javac 失败，停止构建" >&2
+  exit 1
+}
 
 echo "[2/6] d8"
 if command -v d8 >/dev/null 2>&1; then

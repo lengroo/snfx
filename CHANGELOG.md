@@ -1,6 +1,6 @@
 # 每日一遍 · 更新日志
 
-从「目录」功能上线（versionCode 10）到现在（versionCode 59）。
+从「目录」功能上线（versionCode 10）到现在（versionCode 62）。
 版本名在 code 17→18 时由 0.04 升到 0.05，code 55 时升到 0.06，只递进 versionCode。
 
 ## 2026-11-18　v0.04（code 10）— 目录上线
@@ -216,7 +216,26 @@
 - 新增 WeekChartView：回顾页把近 7 天翻篇数画成柱状图（Dialogs 里直接构造）
 - 新增 ReminderReceiver + 通知/精确闹钟/开机自启权限：到点发一条本地提醒，重启后仍能恢复
 
-## 2026-11-23　v0.06（code 59）— 外观可手动切换
+## 2026-11-23　v0.06（code 59）— 翻篇动画 + 外观可手动切换
+- 翻篇动画：换下一篇或右滑回上一句时，正文与译文从 24dp 外滑入并淡入（220ms），方向跟着滑走的方向（左滑从左来、右滑从右来），像卡片翻过去换了一张脸
 - ThemeKit 增加 THEME_SYSTEM / THEME_DARK / THEME_LIGHT 与 configure(Context, mode)
 - 设置里新增「外观」一行：跟随系统 / 深色 / 浅色，选择存 prefs 的 theme_mode，切换后立即重建界面
 - MainActivity 暴露 setThemeMode / themeModeName，供设置弹窗调用
+
+## 2026-11-23　v0.06（code 60）— 时间胶囊 / 语速 / 工程整理
+- 时间胶囊：设置里写一句话并选日期，到那天打开才会弹出，读过一次就不再打扰（capsule_text / capsule_date / capsule_sent）
+- 朗读语速滑杆：0.70–1.30，存 prefs 的 speak_rate，朗读时按它设置 SpeechRate
+- 备份读写抽成 BackupIO，MainActivity 只留转调；onActivityResult 交给 BackupIO.handle
+- QuoteRepo 抽出纯函数 parseSeen/joinSeen/parseDaily/joinDaily/streakFrom，便于脱离 Android 测试
+- 新增 tools/tests/RepoLogicTest.java 与 tools/test.sh：11 项断言全通过（分段解析、往返、连续天数）
+- build.sh 改为脚本自身目录定位项目，并在 javac 失败时立即停止（以前会悄悄产出旧 dex）
+
+## 2026-11-23　v0.06（code 61）— 设置分区 + 语速挪位
+- 设置弹窗按「提醒 / 外观 / 内容 / 数据」四组排布，组标题用强调色小字，组间加 1px 分隔线
+- 朗读语速从设置移出，改到长按「朗读」按钮的弹窗里（标题「朗读」：语言两项 + 分隔线 + 语速滑杆）
+
+## 2026-11-23　v0.06（code 62）— 时间胶囊到期通知
+- ReminderReceiver 新增胶囊闹钟：按 capsule_date 当天 09:00 触发，动作 com.lengroo.snfx.CAPSULE
+- 到点推一条「那天埋下的话，今天到期了」，点开进 App；读过（capsule_sent）后自动取消闹钟
+- 改日期/清除胶囊时重排或撤掉闹钟；开机后 BOOT_COMPLETED 一并恢复
+- 精确闹钟权限被关闭时退回 setAndAllowWhileIdle，时间可能差几分钟

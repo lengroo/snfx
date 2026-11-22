@@ -146,6 +146,11 @@ public class MainActivity extends Activity {
         } else {
             showNext();
         }
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            public void run() {
+                checkCapsule();
+            }
+        }, 600);
     }
 
 
@@ -359,13 +364,8 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_IMPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
             importFromUri(data.getData());
         }
-        if (requestCode == REQ_BACKUP_EXPORT && resultCode == RESULT_OK && data != null
-                && data.getData() != null) {
-            writeBackupTo(data.getData());
-        }
-        if (requestCode == REQ_BACKUP_IMPORT && resultCode == RESULT_OK && data != null
-                && data.getData() != null) {
-            readBackupFrom(data.getData());
+        if (resultCode == RESULT_OK && BackupIO.handle(this, requestCode, resultCode, data)) {
+            return;
         }
     }
 
@@ -1580,7 +1580,7 @@ public class MainActivity extends Activity {
             showTtsHelp(speakEnglish ? "语音引擎里没有英文语音包。" : "语音引擎里没有中文语音包。");
             return;
         }
-        tts.setSpeechRate(speakEnglish ? 0.92f : 0.95f);
+        tts.setSpeechRate(prefs.getInt("speak_rate", 95) / 100f);
         speakingNow = true;
         continuousActive = true;
         updateSpeakLabel();
@@ -1596,7 +1596,7 @@ public class MainActivity extends Activity {
         box.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(6));
 
         TextView title = new TextView(this);
-        title.setText("朗读语言");
+        title.setText("朗读");
         title.setTextColor(TEXT);
         title.setTextSize(17);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -1626,6 +1626,41 @@ public class MainActivity extends Activity {
             });
             box.addView(row);
         }
+
+        View line = new View(this);
+        line.setBackgroundColor(LINE);
+        LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) dp(1)));
+        lineLp.topMargin = (int) dp(12);
+        lineLp.bottomMargin = (int) dp(4);
+        box.addView(line, lineLp);
+
+        final TextView rateLabel = new TextView(this);
+        rateLabel.setText("语速 " + String.format("%.2f", prefs.getInt("speak_rate", 95) / 100f));
+        rateLabel.setTextColor(SUB);
+        rateLabel.setTextSize(12);
+        rateLabel.setPadding(0, (int) dp(10), 0, 0);
+        box.addView(rateLabel);
+
+        android.widget.SeekBar bar = new android.widget.SeekBar(this);
+        bar.setMax(60);
+        bar.setProgress(Math.max(0, Math.min(60, prefs.getInt("speak_rate", 95) - 70)));
+        bar.setPadding(0, (int) dp(4), 0, (int) dp(2));
+        bar.setTag(rateLabel);
+        bar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(android.widget.SeekBar sb, int p, boolean fromUser) {
+                int rate = 70 + p;
+                prefs.edit().putInt("speak_rate", rate).apply();
+                ((TextView) sb.getTag()).setText("语速 " + String.format("%.2f", rate / 100f));
+            }
+
+            public void onStartTrackingTouch(android.widget.SeekBar sb) {
+            }
+
+            public void onStopTrackingTouch(android.widget.SeekBar sb) {
+            }
+        });
+        box.addView(bar);
 
         AlertDialog dlg = new AlertDialog.Builder(this)
                 .setView(box)
@@ -2095,68 +2130,192 @@ public class MainActivity extends Activity {
         styleDialog(dlg);
     }
 
-    void exportBackup() {
-        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("application/json");
-        i.putExtra(Intent.EXTRA_TITLE, "meiriyibian-backup.json");
-        try {
-            startActivityForResult(i, REQ_BACKUP_EXPORT);
-        } catch (Throwable t) {
-            Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
+    private String capsuleDay(java.util.Calendar c) {
+        return String.format("%04d%02d%02d", c.get(java.util.Calendar.YEAR),
+                c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH));
+    }
+
+    void editCapsule() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.setPadding((int) dp(22), (int) dp(18), (int) dp(22), (int) dp(6));
+
+        TextView t = new TextView(this);
+        t.setText("埋一句给未来的自己");
+        t.setTextColor(TEXT);
+        t.setTextSize(17);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        box.addView(t);
+
+        final EditText et = new EditText(this);
+        et.setText(prefs.getString("capsule_text", ""));
+        et.setHint("写给那天的你");
+        et.setMinLines(3);
+        et.setMaxLines(6);
+        et.setGravity(Gravity.TOP);
+        et.setTextColor(TEXT);
+        et.setHintTextColor(HINT);
+        et.setBackground(round(FIELD, dp(12)));
+        et.setPadding((int) dp(14), (int) dp(12), (int) dp(14), (int) dp(12));
+        LinearLayout.LayoutParams etlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        etlp.topMargin = (int) dp(12);
+        box.addView(et, etlp);
+
+        final java.util.Calendar when = java.util.Calendar.getInstance();
+        String saved = prefs.getString("capsule_date", "");
+        if (saved.length() == 8) {
+            try {
+                when.set(Integer.parseInt(saved.substring(0, 4)),
+                        Integer.parseInt(saved.substring(4, 6)) - 1,
+                        Integer.parseInt(saved.substring(6, 8)));
+            } catch (Throwable ignored) {
+                when.add(java.util.Calendar.DAY_OF_YEAR, 14);
+            }
+        } else {
+            when.add(java.util.Calendar.DAY_OF_YEAR, 14);
         }
+
+        final TextView dateRow = new TextView(this);
+        dateRow.setText("打开日期：" + when.get(java.util.Calendar.YEAR) + "-"
+                + (when.get(java.util.Calendar.MONTH) + 1) + "-"
+                + when.get(java.util.Calendar.DAY_OF_MONTH));
+        dateRow.setTextColor(ACCENT);
+        dateRow.setTextSize(14);
+        dateRow.setPadding(0, (int) dp(14), 0, (int) dp(6));
+        dateRow.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                new android.app.DatePickerDialog(MainActivity.this,
+                        new android.app.DatePickerDialog.OnDateSetListener() {
+                    public void onDateSet(android.widget.DatePicker view, int y, int m, int d) {
+                        when.set(y, m, d);
+                        dateRow.setText("打开日期：" + y + "-" + (m + 1) + "-" + d);
+                    }
+                }, when.get(java.util.Calendar.YEAR), when.get(java.util.Calendar.MONTH),
+                        when.get(java.util.Calendar.DAY_OF_MONTH)).show();
+            }
+        });
+        box.addView(dateRow);
+
+        TextView tip = new TextView(this);
+        tip.setText("到那天打开软件，它才会出现。别的时候看不到。");
+        tip.setTextColor(SUB);
+        tip.setTextSize(11);
+        box.addView(tip);
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setPositiveButton("埋下", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String txt = et.getText().toString().trim();
+                        if (txt.length() == 0) {
+                            Toast.makeText(MainActivity.this, "还没写呢", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        prefs.edit().putString("capsule_text", txt)
+                                .putString("capsule_date", capsuleDay(when))
+                                .putBoolean("capsule_sent", false).apply();
+                        ReminderReceiver.scheduleCapsule(MainActivity.this);
+                        Toast.makeText(MainActivity.this, "已经埋好了，那天早上会提醒你",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNeutralButton("清除", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        prefs.edit().putString("capsule_text", "").putString("capsule_date", "")
+                                .putBoolean("capsule_sent", false).apply();
+                        ReminderReceiver.cancelCapsule(MainActivity.this);
+                        Toast.makeText(MainActivity.this, "已清除", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        styleDialog(dlg);
+    }
+
+    private void checkCapsule() {
+        final String txt = prefs.getString("capsule_text", "");
+        String day = prefs.getString("capsule_date", "");
+        if (txt.length() == 0 || day.length() != 8) return;
+        if (prefs.getBoolean("capsule_sent", false)) return;
+        String today = QuoteRepo.dayKey();
+        if (today.compareTo(day) < 0) return;
+        prefs.edit().putBoolean("capsule_sent", true).apply();
+        ReminderReceiver.cancelCapsule(this);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(CARD);
+        box.setPadding((int) dp(22), (int) dp(20), (int) dp(22), (int) dp(6));
+
+        TextView t = new TextView(this);
+        t.setText("那天埋下的话");
+        t.setTextColor(TEXT);
+        t.setTextSize(17);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        box.addView(t);
+
+        TextView body2 = new TextView(this);
+        body2.setText(txt);
+        body2.setTextColor(TEXT);
+        body2.setTextSize(15);
+        body2.setLineSpacing(dp(6), 1f);
+        body2.setPadding(0, (int) dp(12), 0, (int) dp(8));
+        box.addView(body2);
+
+        TextView when = new TextView(this);
+        when.setText("原定日期：" + day.substring(0, 4) + "-" + day.substring(4, 6) + "-"
+                + day.substring(6, 8));
+        when.setTextColor(SUB);
+        when.setTextSize(11);
+        box.addView(when);
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setPositiveButton("收下", null)
+                .show();
+        styleDialog(dlg);
+    }
+
+    String buildBackupJson() {
+        return Backup.toJson(prefs, seenOwn, seenHot, favOwn, favHot);
+    }
+
+    boolean applyBackupJson(String json) {
+        SharedPreferences.Editor ed = prefs.edit();
+        if (!Backup.apply(json, ed, seenOwn, seenHot, favOwn, favHot)) return false;
+        mode = prefs.getInt("mode", 0);
+        countOwn = prefs.getInt("count_own", 0);
+        countHot = prefs.getInt("count_hot", 0);
+        speakEnglish = prefs.getBoolean("speak_en", false);
+        textSizeLevel = prefs.getInt("text_size", 1);
+        lineLevel = prefs.getInt("line_space", 1);
+        ensurePools(mode);
+        rebuildPools();
+        int len = (mode == 0 ? own : hot).length;
+        currentIndex = Math.max(0, Math.min(currentIndex, Math.max(0, len - 1)));
+        applyTypography();
+        refreshLabels();
+        if (len > 0) renderIndex(currentIndex);
+        checkCapsule();
+        return true;
+    }
+
+    void exportBackup() {
+        BackupIO.export(this);
     }
 
     void importBackup() {
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("*/*");
-        try {
-            startActivityForResult(i, REQ_BACKUP_IMPORT);
-        } catch (Throwable t) {
-            Toast.makeText(this, "打不开文件选择器", Toast.LENGTH_SHORT).show();
-        }
+        BackupIO.importFrom(this);
     }
 
     private void writeBackupTo(Uri uri) {
-        try {
-            java.io.OutputStream out = getContentResolver().openOutputStream(uri);
-            String json = Backup.toJson(prefs, seenOwn, seenHot, favOwn, favHot);
-            out.write(json.getBytes("UTF-8"));
-            out.flush();
-            out.close();
-            Toast.makeText(this, "备份已导出", Toast.LENGTH_SHORT).show();
-        } catch (Throwable t) {
-            Toast.makeText(this, "导出失败：" + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
-        }
+        // 逻辑在 BackupIO，这里只留薄封装
     }
 
     private void readBackupFrom(Uri uri) {
-        try {
-            InputStream in = getContentResolver().openInputStream(uri);
-            String json = readAll(in);
-            in.close();
-            SharedPreferences.Editor ed = prefs.edit();
-            if (!Backup.apply(json, ed, seenOwn, seenHot, favOwn, favHot)) {
-                Toast.makeText(this, "这个文件不是本应用的备份", Toast.LENGTH_LONG).show();
-                return;
-            }
-            mode = prefs.getInt("mode", 0);
-            countOwn = prefs.getInt("count_own", 0);
-            countHot = prefs.getInt("count_hot", 0);
-            speakEnglish = prefs.getBoolean("speak_en", false);
-            textSizeLevel = prefs.getInt("text_size", 1);
-            lineLevel = prefs.getInt("line_space", 1);
-            ensurePools(mode);
-            rebuildPools();
-            currentIndex = Math.min(currentIndex, Math.max(0, (mode == 0 ? own : hot).length - 1));
-            applyTypography();
-            refreshLabels();
-            renderIndex(currentIndex);
-            Toast.makeText(this, "备份已恢复", Toast.LENGTH_SHORT).show();
-        } catch (Throwable t) {
-            Toast.makeText(this, "恢复失败：" + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
-        }
+        // 逻辑在 BackupIO，这里只留薄封装
     }
 
     private void showIndex() {

@@ -41,26 +41,37 @@ public final class QuoteRepo {
         return new String[0];
     }
 
-    public static void readSeen(SharedPreferences prefs, String key, Set<Integer> into) {
-        into.clear();
-        String s = prefs.getString(key, "");
-        if (s.length() == 0) return;
+    /** 纯函数："1,3,7" → {1,3,7}，非法项忽略。 */
+    public static java.util.LinkedHashSet<Integer> parseSeen(String s) {
+        java.util.LinkedHashSet<Integer> out = new java.util.LinkedHashSet<Integer>();
+        if (s == null || s.length() == 0) return out;
         String[] parts = s.split(",");
         for (int i = 0; i < parts.length; i++) {
             try {
-                into.add(Integer.parseInt(parts[i].trim()));
+                out.add(Integer.parseInt(parts[i].trim()));
             } catch (Throwable ignored) {
             }
         }
+        return out;
     }
 
-    public static String writeSeen(Set<Integer> set) {
+    /** 纯函数：集合 → "1,3,7"（按迭代顺序）。 */
+    public static String joinSeen(Set<Integer> set) {
         StringBuilder sb = new StringBuilder();
         for (Integer v : set) {
             if (sb.length() > 0) sb.append(',');
             sb.append(v.intValue());
         }
         return sb.toString();
+    }
+
+    public static void readSeen(SharedPreferences prefs, String key, Set<Integer> into) {
+        into.clear();
+        into.addAll(parseSeen(prefs.getString(key, "")));
+    }
+
+    public static String writeSeen(Set<Integer> set) {
+        return joinSeen(set);
     }
 
     public static String dayKey() {
@@ -122,6 +133,54 @@ public final class QuoteRepo {
             it.remove();
         }
         ed.putString("daily", writeDaily(map));
+    }
+
+    /** 纯函数："20260101:3;20260102:1" → 有序 Map。 */
+    public static LinkedHashMap<String, Integer> parseDaily(String raw) {
+        LinkedHashMap<String, Integer> map = new LinkedHashMap<String, Integer>();
+        if (raw == null) return map;
+        for (String part : raw.split(";")) {
+            int c = part.indexOf(':');
+            if (c <= 0) continue;
+            try {
+                map.put(part.substring(0, c), Integer.parseInt(part.substring(c + 1)));
+            } catch (Throwable ignored) {
+            }
+        }
+        return map;
+    }
+
+    public static String joinDaily(Map<String, Integer> map) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Integer> e : map.entrySet()) {
+            if (sb.length() > 0) sb.append(';');
+            sb.append(e.getKey()).append(':').append(e.getValue());
+        }
+        return sb.toString();
+    }
+
+    /** 纯函数：从某一天往前数连续有记录的天数；当天为 0 时从昨天起算。 */
+    public static int streakFrom(Map<String, Integer> daily, int year, int month, int day) {
+        int n = 0;
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.set(year, month - 1, day);
+        boolean first = true;
+        for (int i = 0; i < 400; i++) {
+            java.util.Calendar d = (java.util.Calendar) c.clone();
+            d.add(java.util.Calendar.DAY_OF_YEAR, -i);
+            String key = String.format("%04d%02d%02d", d.get(java.util.Calendar.YEAR),
+                    d.get(java.util.Calendar.MONTH) + 1, d.get(java.util.Calendar.DAY_OF_MONTH));
+            Integer v = daily.get(key);
+            if (v != null && v > 0) {
+                n++;
+                first = false;
+            } else if (first) {
+                first = false;
+            } else {
+                break;
+            }
+        }
+        return n;
     }
 
     public static int dailyCount(SharedPreferences prefs, String key) {

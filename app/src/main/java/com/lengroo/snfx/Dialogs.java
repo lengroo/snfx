@@ -38,11 +38,11 @@ public final class Dialogs {
         return t;
     }
 
-    public static void showSettings(final MainActivity a) {
+public static void showSettings(final MainActivity a) {
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(ThemeKit.CARD);
-        box.setPadding((int) dp(22), (int) dp(20), (int) dp(22), (int) dp(8));
+        box.setPadding((int) dp(22), (int) dp(18), (int) dp(22), (int) dp(8));
 
         TextView title = new TextView(a);
         title.setText("设置");
@@ -51,13 +51,14 @@ public final class Dialogs {
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         box.addView(title);
 
+        section(box, a, "提醒");
         CheckBox cb = new CheckBox(a);
         cb.setText("每翻 10 篇弹一句安慰话");
         cb.setTextSize(14);
         cb.setTextColor(ThemeKit.TEXT);
         cb.setChecked(a.prefs().getBoolean("comfort_on", true));
         cb.setButtonTintList(android.content.res.ColorStateList.valueOf(ThemeKit.ACCENT));
-        cb.setPadding(0, (int) dp(14), 0, (int) dp(4));
+        cb.setPadding(0, (int) dp(8), 0, (int) dp(2));
         cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) {
                 a.prefs().edit().putBoolean("comfort_on", on).apply();
@@ -73,7 +74,7 @@ public final class Dialogs {
         cont.setTextColor(ThemeKit.TEXT);
         cont.setChecked(a.prefs().getBoolean("continuous", false));
         cont.setButtonTintList(android.content.res.ColorStateList.valueOf(ThemeKit.ACCENT));
-        cont.setPadding(0, (int) dp(6), 0, (int) dp(4));
+        cont.setPadding(0, (int) dp(2), 0, (int) dp(2));
         cont.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) {
                 a.prefs().edit().putBoolean("continuous", on).apply();
@@ -89,7 +90,7 @@ public final class Dialogs {
         rem.setTextColor(ThemeKit.TEXT);
         rem.setChecked(a.prefs().getBoolean("reminder_on", false));
         rem.setButtonTintList(android.content.res.ColorStateList.valueOf(ThemeKit.ACCENT));
-        rem.setPadding(0, (int) dp(6), 0, (int) dp(4));
+        rem.setPadding(0, (int) dp(2), 0, (int) dp(2));
         rem.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) {
                 a.setReminder(on, rem);
@@ -99,14 +100,10 @@ public final class Dialogs {
 
         final TextView remTime = new TextView(a);
         remTime.setText("提醒时间 " + a.reminderTimeStr());
-        remTime.setTextColor(ThemeKit.TEXT);
-        remTime.setTextSize(14);
+        remTime.setTextColor(ThemeKit.SUB);
+        remTime.setTextSize(13);
         remTime.setGravity(Gravity.CENTER_VERTICAL);
-        remTime.setPadding((int) dp(4), (int) dp(12), (int) dp(4), (int) dp(12));
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        rlp.bottomMargin = (int) dp(6);
-        remTime.setLayoutParams(rlp);
+        remTime.setPadding((int) dp(30), (int) dp(6), (int) dp(4), (int) dp(10));
         remTime.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 int h = a.prefs().getInt("reminder_hour", 22);
@@ -128,47 +125,56 @@ public final class Dialogs {
         });
         box.addView(remTime);
 
+        divider(box, a);
+
+        section(box, a, "外观");
         final TextView themeRow = row(a, "外观：" + a.themeModeName(
                 a.prefs().getInt("theme_mode", ThemeKit.THEME_SYSTEM)),
                 new View.OnClickListener() {
-            public void onClick(View v) {
-                final AlertDialog[] holder = new AlertDialog[1];
-                LinearLayout tbox = new LinearLayout(a);
-                tbox.setOrientation(LinearLayout.VERTICAL);
-                String[] names = {"跟随系统", "深色", "浅色"};
-                final int cur = a.prefs().getInt("theme_mode", ThemeKit.THEME_SYSTEM);
-                for (int k = 0; k < names.length; k++) {
-                    final int mode = k;
-                    TextView r = new TextView(a);
-                    r.setText(names[k] + (mode == cur ? "  ✓" : ""));
-                    r.setTextColor(mode == cur ? ThemeKit.ACCENT : ThemeKit.TEXT);
-                    r.setTextSize(15);
-                    r.setPadding((int) dp(24), (int) dp(18), (int) dp(24), (int) dp(18));
-                    r.setOnClickListener(new View.OnClickListener() {
-                        public void onClick(View v) {
-                            if (holder[0] != null) holder[0].dismiss();
-                            a.setThemeMode(mode);
+                    public void onClick(View v) {
+                        final AlertDialog[] holder = new AlertDialog[1];
+                        LinearLayout tbox = new LinearLayout(a);
+                        tbox.setOrientation(LinearLayout.VERTICAL);
+                        tbox.setBackgroundColor(ThemeKit.CARD);
+                        String[] names = {"跟随系统", "深色", "浅色"};
+                        final int cur = a.prefs().getInt("theme_mode", ThemeKit.THEME_SYSTEM);
+                        for (int k = 0; k < names.length; k++) {
+                            final int mode = k;
+                            TextView r = new TextView(a);
+                            r.setText(names[k] + (mode == cur ? "  ✓" : ""));
+                            r.setTextColor(mode == cur ? ThemeKit.ACCENT : ThemeKit.TEXT);
+                            r.setTextSize(15);
+                            r.setPadding((int) dp(24), (int) dp(18), (int) dp(24), (int) dp(18));
+                            r.setOnClickListener(new View.OnClickListener() {
+                                public void onClick(View v) {
+                                    if (holder[0] != null) holder[0].dismiss();
+                                    a.setThemeMode(mode);
+                                }
+                            });
+                            tbox.addView(r);
                         }
-                    });
-                    tbox.addView(r);
-                }
-                AlertDialog dlg = new AlertDialog.Builder(a)
-                        .setView(tbox)
-                        .setNegativeButton("取消", null)
-                        .show();
-                holder[0] = dlg;
-                ThemeKit.styleDialog(dlg);
-            }
-        });
+                        AlertDialog dlg = new AlertDialog.Builder(a)
+                                .setView(tbox)
+                                .setNegativeButton("取消", null)
+                                .show();
+                        holder[0] = dlg;
+                        ThemeKit.styleDialog(dlg);
+                    }
+                });
         box.addView(themeRow);
 
-        TextView tip = new TextView(a);
-        tip.setText("关掉安慰话后，翻多少篇都不会打断你。");
-        tip.setTextColor(ThemeKit.SUB);
-        tip.setTextSize(11);
-        tip.setPadding(0, (int) dp(6), 0, (int) dp(14));
-        box.addView(tip);
+        divider(box, a);
 
+        section(box, a, "内容");
+        box.addView(row(a, "埋一句给未来的自己", new View.OnClickListener() {
+            public void onClick(View v) {
+                a.editCapsule();
+            }
+        }));
+
+        divider(box, a);
+
+        section(box, a, "数据");
         box.addView(row(a, "清空浏览记录", new View.OnClickListener() {
             public void onClick(View v) {
                 a.clearHistory();
@@ -190,6 +196,25 @@ public final class Dialogs {
                 .setNegativeButton("关闭", null)
                 .show();
         ThemeKit.styleDialog(dlg);
+    }
+
+    private static void section(LinearLayout box, final MainActivity a, String text) {
+        TextView t = new TextView(a);
+        t.setText(text);
+        t.setTextColor(ThemeKit.ACCENT);
+        t.setTextSize(11);
+        t.setLetterSpacing(0.1f);
+        t.setPadding((int) dp(2), (int) dp(14), 0, (int) dp(4));
+        box.addView(t);
+    }
+
+    private static void divider(LinearLayout box, final MainActivity a) {
+        View v = new View(a);
+        v.setBackgroundColor(ThemeKit.LINE);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, (int) dp(1)));
+        lp.topMargin = (int) dp(12);
+        box.addView(v, lp);
     }
 
     public static void showReview(final MainActivity a) {
