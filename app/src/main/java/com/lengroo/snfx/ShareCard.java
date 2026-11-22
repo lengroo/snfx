@@ -20,53 +20,89 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 把一篇文案渲染成 1080x1920 的分享图。
+ * 把一篇文案渲染成 1080x1920 的分享图，两套模板。
  *
- * 设计：深色杂志卡片。顶部一颗小心形 + 间距拉开的品牌字；正文是衬线大字、
- * 行距宽松，整块文字在卡片里垂直居中；正文后一条粉色短线，再接英文译文；
- * 底部分隔线 + 品牌与日期。背景是纵向渐变 + 右上角一团很淡的粉色光晕，
- * 外圈一根细描边，代替原来死板的实心卡片。
+ * 版式（两套共用）：顶部一颗小心形 + 间距拉开的品牌字，右边日期；正文是衬线大字、
+ * 行距宽松，整块文字在卡片里垂直居中；正文后一条短线，再接英文译文；
+ * 底部分隔线 + 品牌页脚。外圈一根细描边。
+ * 深色杂志：纵向渐变深底 + 右上角淡粉色光晕。
+ * 浅色纸感：暖米色纸底 + 右上角淡玫红光晕，墨色正文。
  */
 public final class ShareCard {
 
+    /** 模板：深色杂志。 */
+    public static final int TEMPLATE_DARK = 0;
+    /** 模板：浅色纸感。 */
+    public static final int TEMPLATE_LIGHT = 1;
+
     private static final int W = 1080;
     private static final int H = 1920;
-
-    // 背景：纵向渐变 + 粉色光晕
-    private static final int BG_TOP = 0xFF17171D;
-    private static final int BG_BOTTOM = 0xFF0A0A0D;
-    private static final int GLOW = 0xFFFF5A7A;
-
-    private static final int FRAME = 0x14FFFFFF;   // 细描边：白色 8%
-    private static final int HAIRLINE = 0x1AFFFFFF; // 底部分隔线：白色 10%
-    private static final int TEXT = 0xFFF2EFEA;     // 正文：暖白
-    private static final int BRAND = 0xFFD8D8E0;    // 品牌字：浅灰
-    private static final int SUB = 0xFF9C9CA8;      // 英文 / 页脚：中灰
-    private static final int ACCENT = 0xFFFF5A7A;   // 粉色点缀
-    private static final int QUOTE_MARK = 0x38FF5A7A; // 大引号：粉色 22%
 
     private static final int MARGIN = 120;          // 左右边距
     private static final int FRAME_INSET = 44;      // 描边距边缘
     private static final int CONTENT_TOP = 300;     // 正文区上沿
     private static final int CONTENT_BOTTOM = 1690; // 正文区下沿
 
+    /** 一套模板的全部配色。 */
+    private static final class Palette {
+        final int bgTop, bgBottom;
+        final int glowColor, glowAlpha;
+        final int frame, hairline, text, brand, sub, accent, quoteMark;
+
+        Palette(int bgTop, int bgBottom, int glowColor, int glowAlpha,
+                int frame, int hairline, int text, int brand, int sub,
+                int accent, int quoteMark) {
+            this.bgTop = bgTop;
+            this.bgBottom = bgBottom;
+            this.glowColor = glowColor;
+            this.glowAlpha = glowAlpha;
+            this.frame = frame;
+            this.hairline = hairline;
+            this.text = text;
+            this.brand = brand;
+            this.sub = sub;
+            this.accent = accent;
+            this.quoteMark = quoteMark;
+        }
+    }
+
+    private static final Palette DARK = new Palette(
+            0xFF17171D, 0xFF0A0A0D,             // 背景渐变
+            0xFFFF5A7A, 26,                     // 光晕：粉色
+            0x14FFFFFF, 0x1AFFFFFF,             // 描边 / 分隔线：白色 8% / 10%
+            0xFFF2EFEA, 0xFFD8D8E0, 0xFF9C9CA8, // 正文暖白 / 品牌浅灰 / 英文页脚中灰
+            0xFFFF5A7A, 0x38FF5A7A);            // 点缀粉 / 大引号粉 22%
+
+    private static final Palette LIGHT = new Palette(
+            0xFFF7F2E8, 0xFFEEE7D8,             // 背景渐变：暖米纸
+            0xFFD84069, 22,                     // 光晕：玫红
+            0x1A000000, 0x1F000000,             // 描边 / 分隔线：墨色 10% / 12%
+            0xFF241F19, 0xFF3A342C, 0xFF8A8175, // 正文墨色 / 品牌深褐 / 英文页脚暖灰
+            0xFFD84069, 0x2ED84069);            // 点缀玫红 / 大引号玫红 18%
+
     private ShareCard() {
     }
 
+    /** 默认用深色杂志模板。 */
     public static File render(File dir, String zh, String en, String footer) throws Exception {
+        return render(dir, zh, en, footer, TEMPLATE_DARK);
+    }
+
+    public static File render(File dir, String zh, String en, String footer, int template) throws Exception {
+        Palette p = template == TEMPLATE_LIGHT ? LIGHT : DARK;
         Bitmap bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
 
-        drawBackground(c);
-        drawFrame(c);
-        drawBrand(c);
+        drawBackground(c, p);
+        drawFrame(c, p);
+        drawBrand(c, p);
 
         // --- 先排版，再把正文 + 英文整块垂直居中 ---
-        ZhStyle zhStyle = pickZhStyle(zh);
+        ZhStyle zhStyle = pickZhStyle(zh, p);
         List<String> zhLines = wrap(zh, zhStyle.paint, W - MARGIN * 2);
         float zhH = zhLines.isEmpty() ? 0 : zhLines.size() * zhStyle.lineH;
 
-        Paint enPaint = enPaint();
+        Paint enPaint = enPaint(p);
         List<String> enLines = wrap(en, enPaint, W - MARGIN * 2);
         float enH = enLines.isEmpty() ? 0 : enLines.size() * 50;
 
@@ -75,19 +111,19 @@ public final class ShareCard {
         float blockH = zhH + gapRule + enH;
         float top = CONTENT_TOP + (CONTENT_BOTTOM - CONTENT_TOP - blockH) / 2;
 
-        drawQuoteMark(c, top);
+        drawQuoteMark(c, p, top);
         float y = top;
         y = drawLines(c, zhLines, zhStyle.paint, MARGIN, y, zhStyle.lineH);
         if (hasEn) {
             y += 44;
             Paint rule = new Paint(Paint.ANTI_ALIAS_FLAG);
-            rule.setColor(ACCENT);
+            rule.setColor(p.accent);
             c.drawRoundRect(new RectF(MARGIN, y, MARGIN + 72, y + 5), 2.5f, 2.5f, rule);
             y += 5 + 36;
             y = drawLines(c, enLines, enPaint, MARGIN, y, 50);
         }
 
-        drawFooter(c, footer);
+        drawFooter(c, p, footer);
 
         File out = new File(dir, "share.png");
         FileOutputStream fos = null;
@@ -107,65 +143,67 @@ public final class ShareCard {
         }
     }
 
-    /** 纵向渐变底 + 右上角一团淡粉色光晕。 */
-    private static void drawBackground(Canvas c) {
+    /** 纵向渐变底 + 右上角一团淡色光晕。 */
+    private static void drawBackground(Canvas c, Palette p) {
         Paint bg = new Paint();
-        bg.setShader(new LinearGradient(0, 0, 0, H, BG_TOP, BG_BOTTOM, Shader.TileMode.CLAMP));
+        bg.setShader(new LinearGradient(0, 0, 0, H, p.bgTop, p.bgBottom, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, W, H, bg);
 
         Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
         glow.setShader(new RadialGradient(W * 0.78f, 240, 560,
-                Color.argb(26, 255, 90, 122), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                Color.argb(p.glowAlpha, Color.red(p.glowColor),
+                        Color.green(p.glowColor), Color.blue(p.glowColor)),
+                Color.TRANSPARENT, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, W, H, glow);
     }
 
     /** 外圈细描边，圆角。 */
-    private static void drawFrame(Canvas c) {
+    private static void drawFrame(Canvas c, Palette p) {
         Paint frame = new Paint(Paint.ANTI_ALIAS_FLAG);
         frame.setStyle(Paint.Style.STROKE);
         frame.setStrokeWidth(2);
-        frame.setColor(FRAME);
+        frame.setColor(p.frame);
         c.drawRoundRect(new RectF(FRAME_INSET, FRAME_INSET, W - FRAME_INSET, H - FRAME_INSET),
                 48, 48, frame);
     }
 
-    /** 顶部：左边小心形 + 间距拉开的「每日一遍」，右边日期。 */
-    private static void drawBrand(Canvas c) {
+    /** 顶部：左边小心形 + 间距拉开的品牌字，右边日期。 */
+    private static void drawBrand(Canvas c, Palette p) {
         float cy = 168; // 基线
-        drawHeart(c, MARGIN, cy - 26, 30, ACCENT);
+        drawHeart(c, MARGIN, cy - 26, 30, p.accent);
 
         Paint brand = new Paint(Paint.ANTI_ALIAS_FLAG);
-        brand.setColor(BRAND);
+        brand.setColor(p.brand);
         brand.setTextSize(30);
         brand.setLetterSpacing(0.42f);
         brand.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         c.drawText("每日一遍", MARGIN + 46, cy, brand);
 
         Paint datePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        datePaint.setColor(SUB);
+        datePaint.setColor(p.sub);
         datePaint.setTextSize(26);
         datePaint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         String date = new SimpleDateFormat("yyyy.MM.dd", Locale.CHINA).format(new Date());
         c.drawText(date, W - MARGIN - datePaint.measureText(date), cy, datePaint);
     }
 
-    /** 正文左上角一枚很大的淡粉色引号，衬在第一行后面。 */
-    private static void drawQuoteMark(Canvas c, float quoteTop) {
+    /** 正文左上角一枚很大的淡色引号，衬在第一行后面。 */
+    private static void drawQuoteMark(Canvas c, Palette p, float quoteTop) {
         Paint mark = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mark.setColor(QUOTE_MARK);
+        mark.setColor(p.quoteMark);
         mark.setTextSize(300);
         mark.setTypeface(Typeface.create("serif", Typeface.BOLD));
         c.drawText("\u201C", 92, quoteTop + 40, mark);
     }
 
     /** 底部：分隔线 + 品牌页脚。 */
-    private static void drawFooter(Canvas c, String footer) {
+    private static void drawFooter(Canvas c, Palette p, String footer) {
         Paint line = new Paint();
-        line.setColor(HAIRLINE);
+        line.setColor(p.hairline);
         c.drawRect(MARGIN, 1760, W - MARGIN, 1761.5f, line);
 
         Paint foot = new Paint(Paint.ANTI_ALIAS_FLAG);
-        foot.setColor(SUB);
+        foot.setColor(p.sub);
         foot.setTextSize(26);
         foot.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         if (footer != null) c.drawText(footer, MARGIN, 1822, foot);
@@ -187,31 +225,31 @@ public final class ShareCard {
         c.drawPath(p, paint);
     }
 
-    private static Paint enPaint() {
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(SUB);
-        p.setTextSize(30);
-        p.setTypeface(Typeface.create("serif", Typeface.ITALIC));
-        return p;
+    private static Paint enPaint(Palette p) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(p.sub);
+        paint.setTextSize(30);
+        paint.setTypeface(Typeface.create("serif", Typeface.ITALIC));
+        return paint;
     }
 
     /** 正文按长度自适应：太长就缩小一档字号。 */
-    private static ZhStyle pickZhStyle(String zh) {
-        ZhStyle s54 = new ZhStyle(54, 88);
+    private static ZhStyle pickZhStyle(String zh, Palette p) {
+        ZhStyle s54 = new ZhStyle(54, 88, p);
         if (wrap(zh, s54.paint, W - MARGIN * 2).size() <= 9) return s54;
-        ZhStyle s48 = new ZhStyle(48, 78);
+        ZhStyle s48 = new ZhStyle(48, 78, p);
         if (wrap(zh, s48.paint, W - MARGIN * 2).size() <= 11) return s48;
-        return new ZhStyle(44, 72);
+        return new ZhStyle(44, 72, p);
     }
 
     private static final class ZhStyle {
         final Paint paint;
         final float lineH;
 
-        ZhStyle(float size, float lineH) {
+        ZhStyle(float size, float lineH, Palette p) {
             this.lineH = lineH;
             paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            paint.setColor(TEXT);
+            paint.setColor(p.text);
             paint.setTextSize(size);
             paint.setTypeface(Typeface.create("serif", Typeface.NORMAL));
         }

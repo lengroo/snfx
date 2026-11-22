@@ -1778,13 +1778,45 @@ public class MainActivity extends Activity {
         styleDialog(dlg);
     }
 
-    private void shareCurrent(int idx) {
+    private void shareCurrent(final int idx) {
         String[] pool = mode == 0 ? own : hot;
         String[] enPool = mode == 0 ? ownEn : hotEn;
         if (idx < 0 || idx >= pool.length) return;
-        String en = idx < enPool.length ? enPool[idx].trim() : "";
+        final String en = idx < enPool.length ? enPool[idx].trim() : "";
+        final String zh = pool[idx].trim();
+        final int last = prefs.getInt("share_template", ShareCard.TEMPLATE_DARK);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        final AlertDialog[] holder = new AlertDialog[1];
+        String[] names = {"深色杂志", "浅色纸感"};
+        for (int k = 0; k < names.length; k++) {
+            final int template = k;
+            TextView row = new TextView(this);
+            row.setText(names[k] + (template == last ? "  ✓" : ""));
+            row.setTextColor(template == last ? ACCENT : TEXT);
+            row.setTextSize(15);
+            row.setPadding((int) dp(24), (int) dp(18), (int) dp(24), (int) dp(18));
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (holder[0] != null) holder[0].dismiss();
+                    prefs.edit().putInt("share_template", template).apply();
+                    renderAndShare(zh, en, template);
+                }
+            });
+            box.addView(row);
+        }
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .show();
+        holder[0] = dlg;
+        styleDialog(dlg);
+    }
+
+    private void renderAndShare(String zh, String en, int template) {
         try {
-            ShareCard.render(getCacheDir(), pool[idx].trim(), en, "每日一遍 · " + AUTHOR);
+            ShareCard.render(getCacheDir(), zh, en, "每日一遍 · " + AUTHOR, template);
             Uri u = Uri.parse("content://" + ShareProvider.AUTHORITY + "/share.png");
             Intent i = new Intent(Intent.ACTION_SEND);
             i.setType("image/png");
