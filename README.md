@@ -2,7 +2,7 @@
 
 水泥封心文案 App：每天翻一篇，扎心但上头。
 
-包名 `com.lengroo.snfx`，当前版本 **v0.06**（versionCode 62）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
+包名 `com.lengroo.snfx`，当前版本 **v0.0.7**（versionCode 64）。纯 Java + 原生 View，无 Gradle、无 Compose、无第三方库。
 
 ## 这是什么
 
@@ -16,7 +16,8 @@
 
 - **两个文案池**：原创长文案（默认）/ 抖音热门，底部按钮切换
 - **两种模式**（标题栏）：默认模式抽过的不再抽到，看完一整轮自动重开一轮；随机模式纯随机（只避开正在显示的那一篇）
-- **滑动换篇**：卡片上左滑换下一篇，右滑回到上一句。历史栈最多 200 条，目录跳转也会进历史。换篇时正文淡入 + 从滑动方向轻滑进来（220 毫秒）
+- **滑动换篇**：卡片上左滑换下一篇，右滑回到上一句。手势在 Activity 层跟踪整段，手指落在正文上也能切；划过 40dp 就切，不用等抬手。历史栈最多 200 条，目录跳转也会进历史。换篇时正文淡入 + 从滑动方向轻滑进来（220 毫秒）
+- **卡片版式**：短文案在卡片里垂直居中，正文上方有一枚淡淡的大引号；卡片右边的滚动条隐藏了，长文案照样能上下滑
 - **目录**：卡片底部「目录 · N」打开当前池子全部条目，正在看的那条粉色加粗标出；标题右侧「定位当前」一键把它滚到列表正中；顶部搜索框按中文或英文译文实时过滤；点任意一行直接跳到那篇，并计入已翻次数与已看记录
 - **收藏**：卡片底部「收藏 · N」打开收藏列表，点开跳转，长按移出；收藏分池保存
 - **旋转不断篇**：旋转屏幕或切换深浅色后，停在原来那一篇
@@ -62,7 +63,7 @@
 ### 分享与彩蛋
 
 - **长按正文菜单**：复制 / 收藏（取消收藏）/ 分享成图
-- **分享成图**：1080×1920 深色杂志卡片（渐变底 + 右上角淡粉色光晕 + 细描边，顶部小心形与品牌字、右上角日期；正文衬线大字、行距宽松，左上角淡粉色大引号，整块文字垂直居中，太长自动缩小字号；正文与英文之间一条粉色短线，英文斜体灰字；底部细分隔线 + 品牌页脚），另有浅色纸感模板（米白纸底 + 深墨字 + 玫瑰点缀）和红橙黄绿蓝靛紫七色模板（同色系渐变底 + 淡色光晕），分享时九选一，上次的选择会被记住；自建 ShareProvider 通过 `content://` 分享，不申请存储权限；分享图不跟随主题
+- **分享成图**：1080×1920 深色杂志卡片（渐变底 + 右上角淡粉色光晕 + 细描边，顶部小心形与品牌字、右上角日期；正文衬线大字、行距宽松，左上角淡粉色大引号，整块文字垂直居中，太长自动缩小字号；正文与英文之间一条粉色短线，英文斜体灰字；底部细分隔线 + 品牌页脚），另有浅色纸感模板（米白纸底 + 深墨字 + 玫瑰点缀）和红橙黄绿蓝靛紫七色模板（同色系渐变底 + 淡色光晕），分享时九选一，选的时候每行前面有个模板色点，上次的选择会被记住；自建 ShareProvider 通过 `content://` 分享，不申请存储权限；分享图不跟随主题
 - **彩蛋**：「关于」标题右侧有一颗「不要点我」小按钮，点开是一段约 1300 字的独白，五段排版，可滚动、可长按选中复制。文本在 `assets/nopoint.txt`，想换词直接改这个文件、重打包即可
 
 ## 导入 txt 的格式
@@ -102,7 +103,7 @@ python3 tools/merge_own.py   # 把 tools/import/*.txt 合并去重进 quotes.txt
 
 ## 技术
 
-- 纯 Java + 原生 View，`MainActivity.java`（2470 行）+ `ThemeKit.java`（配色与工具）+ `QuoteRepo.java`（文案池、已看/收藏、每日统计、安慰语）+ `Dialogs.java`（设置/回顾/停一下弹窗）+ `Backup.java`（备份导出/恢复）+ `BackupIO.java`（备份文件读写，SAF）+ `ShareCard.java`（分享成图，九套模板）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
+- 纯 Java + 原生 View，`MainActivity.java`（2520 行）+ `ThemeKit.java`（配色与工具）+ `QuoteRepo.java`（文案池、已看/收藏、每日统计、安慰语）+ `Dialogs.java`（设置/回顾/停一下弹窗）+ `Backup.java`（备份导出/恢复）+ `BackupIO.java`（备份文件读写，SAF）+ `ShareCard.java`（分享成图，九套模板）+ `ShareProvider.java`（FileProvider，供分享时授权图片）
 - minSdk 21 / targetSdk 33；manifest 声明 `queries: android.intent.action.TTS_SERVICE`（Android 11+ 查得到语音引擎）
 - `build.sh` 直接调 `javac` + `d8` + `aapt` + `zipalign` + `apksigner`，不用 Gradle
 - 状态键（SharedPreferences `dby`）：`mode`、`random_mode`、`count_own`、`count_hot`、`seen_own`、`seen_hot`、`fav_own`、`fav_hot`、`speak_en`、`text_size`、`line_space`、`comfort_on`、`continuous`、`daily`
@@ -127,7 +128,7 @@ bash build.sh   # 产物 build/每日一遍.apk
 ## 目录结构
 
 ```
-app/src/main/java/com/lengroo/snfx/MainActivity.java   # 主界面与逻辑（2470 行）
+app/src/main/java/com/lengroo/snfx/MainActivity.java   # 主界面与逻辑（2520 行）
 app/src/main/java/com/lengroo/snfx/ThemeKit.java       # 配色（深浅两套）与界面工具
 app/src/main/java/com/lengroo/snfx/QuoteRepo.java      # 文案池、已看/收藏、每日统计、安慰语
 app/src/main/java/com/lengroo/snfx/Dialogs.java        # 设置 / 回顾 / 停一下弹窗
@@ -170,7 +171,7 @@ CHANGELOG.md                     # 从目录功能上线以来的版本更新日
 
 ## 更新日志
 
-版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.06 / code 62）。
+版本历史见 [CHANGELOG.md](CHANGELOG.md)，从目录功能上线（v0.04 / code 10）记到现在（v0.0.7 / code 64）。
 
 ## 作者
 

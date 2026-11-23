@@ -145,6 +145,11 @@ public final class ShareCard {
             0xFFFFFFFF, 0xFFF3E5F5, 0xFFD0B4DE,
             0xFFFFFFFF, 0x3DFFFFFF);
 
+    /** 模板主色（背景渐变上端），供模板选择器画色点。 */
+    public static int templateColor(int template) {
+        return paletteFor(template).bgTop;
+    }
+
     private static Palette paletteFor(int template) {
         switch (template) {
             case TEMPLATE_LIGHT: return LIGHT;

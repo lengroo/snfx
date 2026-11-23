@@ -103,6 +103,9 @@ public class MainActivity extends Activity {
     private AlertDialog typeDialog;
     private TextView source;
     private ScrollView scroll;
+    private float swipeSx, swipeSy;
+    private long swipeSt;
+    private boolean swipeFired;
     private Button toggle;
     private Button modeBtn;
     private SharedPreferences prefs;
@@ -646,27 +649,8 @@ public class MainActivity extends Activity {
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
-        sv.setOnTouchListener(new View.OnTouchListener() {
-            float sx, sy;
-            long st;
-
-            public boolean onTouch(View v, android.view.MotionEvent e) {
-                if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
-                    sx = e.getX();
-                    sy = e.getY();
-                    st = System.currentTimeMillis();
-                } else if (e.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
-                    float dx = e.getX() - sx;
-                    float dy = e.getY() - sy;
-                    if (Math.abs(dx) > dp(56) && Math.abs(dx) > Math.abs(dy) * 1.6f
-                            && System.currentTimeMillis() - st < 700) {
-                        if (dx < 0) showNext();
-                        else goBack();
-                    }
-                }
-                return false;
-            }
-        });
+        sv.setVerticalScrollBarEnabled(false);
+        sv.setHorizontalScrollBarEnabled(false);
         scroll = sv;
         body = new TextView(this);
         body.setTextColor(TEXT);
@@ -682,6 +666,15 @@ public class MainActivity extends Activity {
         });
         LinearLayout textCol = new LinearLayout(this);
         textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setGravity(Gravity.CENTER_VERTICAL);
+        TextView mark = new TextView(this);
+        mark.setText("\u201c");
+        mark.setTextColor(0x1AFFFFFF);
+        mark.setTextSize(48);
+        mark.setTypeface(Typeface.create("serif", Typeface.NORMAL));
+        mark.setPadding((int) dp(20), (int) dp(16), (int) dp(20), 0);
+        textCol.addView(mark, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         textCol.addView(body, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         trans = new TextView(this);
@@ -812,9 +805,9 @@ public class MainActivity extends Activity {
 
         toggle = new Button(this);
         toggle.setAllCaps(false);
-        toggle.setTextSize(14);
+        toggle.setTextSize(13);
         toggle.setTextColor(ACCENT);
-        toggle.setBackground(ripple(outline(0x00000000, LINE, dp(16)), RIPPLE));
+        toggle.setBackground(ripple(round(0x00000000, dp(16)), RIPPLE));
         toggle.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 mode = 1 - mode;
@@ -826,7 +819,7 @@ public class MainActivity extends Activity {
             }
         });
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(46));
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(40));
         tlp.leftMargin = (int) dp(16);
         tlp.rightMargin = (int) dp(16);
         tlp.bottomMargin = (int) dp(20);
@@ -835,6 +828,53 @@ public class MainActivity extends Activity {
         setContentView(root);
         applyTypography();
         refreshLabels();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent e) {
+        // 卡片内的左右滑动切篇：在 Activity 层跟踪整段手势。
+        // 之前把监听挂在 ScrollView 上，手指落在正文上时事件先被 TextView 接走，
+        // 监听收不到 MOVE/UP，所以有的时候怎么划都不切篇。
+        if (scroll != null) {
+            int action = e.getActionMasked();
+            if (action == android.view.MotionEvent.ACTION_DOWN) {
+                int[] loc = new int[2];
+                scroll.getLocationOnScreen(loc);
+                float x = e.getRawX(), y = e.getRawY();
+                if (x >= loc[0] && x <= loc[0] + scroll.getWidth()
+                        && y >= loc[1] && y <= loc[1] + scroll.getHeight()) {
+                    swipeSx = e.getRawX();
+                    swipeSy = e.getRawY();
+                    swipeSt = System.currentTimeMillis();
+                    swipeFired = false;
+                } else {
+                    swipeFired = true;
+                }
+            } else if (action == android.view.MotionEvent.ACTION_MOVE) {
+                if (!swipeFired) {
+                    float dx = e.getRawX() - swipeSx;
+                    float dy = e.getRawY() - swipeSy;
+                    if (Math.abs(dx) > dp(40) && Math.abs(dx) > Math.abs(dy) * 1.2f) {
+                        swipeFired = true;
+                        if (dx < 0) showNext();
+                        else goBack();
+                    }
+                }
+            } else if (action == android.view.MotionEvent.ACTION_UP
+                    || action == android.view.MotionEvent.ACTION_CANCEL) {
+                if (!swipeFired) {
+                    float dx = e.getRawX() - swipeSx;
+                    float dy = e.getRawY() - swipeSy;
+                    if (Math.abs(dx) > dp(40) && Math.abs(dx) > Math.abs(dy) * 1.2f
+                            && System.currentTimeMillis() - swipeSt < 1200) {
+                        if (dx < 0) showNext();
+                        else goBack();
+                    }
+                }
+                swipeFired = true;
+            }
+        }
+        return super.dispatchTouchEvent(e);
     }
 
     private void showAbout() {
@@ -1841,11 +1881,21 @@ public class MainActivity extends Activity {
         String[] names = {"深色杂志", "浅色纸感", "红", "橙", "黄", "绿", "蓝", "靛", "紫"};
         for (int k = 0; k < names.length; k++) {
             final int template = k;
-            TextView row = new TextView(this);
-            row.setText(names[k] + (template == last ? "  ✓" : ""));
-            row.setTextColor(template == last ? ACCENT : TEXT);
-            row.setTextSize(15);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding((int) dp(24), (int) dp(18), (int) dp(24), (int) dp(18));
+            View dot = new View(this);
+            dot.setBackground(outline(ShareCard.templateColor(template), LINE, dp(8)));
+            row.addView(dot, new LinearLayout.LayoutParams((int) dp(16), (int) dp(16)));
+            TextView name = new TextView(this);
+            name.setText(names[k] + (template == last ? "  ✓" : ""));
+            name.setTextColor(template == last ? ACCENT : TEXT);
+            name.setTextSize(15);
+            LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            nlp.leftMargin = (int) dp(12);
+            row.addView(name, nlp);
             row.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     if (holder[0] != null) holder[0].dismiss();
