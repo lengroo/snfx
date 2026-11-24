@@ -1,6 +1,6 @@
 # 每日一遍 · 更新日志
 
-从「目录」功能上线（versionCode 10）到现在（versionCode 64）。
+从「目录」功能上线（versionCode 10）到现在（versionCode 66）。
 版本名在 code 17→18 时由 0.04 升到 0.05，code 55 时升到 0.06，code 64 时改为 0.0.7，只递进 versionCode。
 
 ## 2026-11-18　v0.04（code 10）— 目录上线
@@ -250,3 +250,10 @@
 ## 2026-11-23　v0.0.7（code 64）— 版本号调整
 - versionName 0.06 → 0.0.7，versionCode 63 → 64
 - 本版内容与 code 63 相同：滑动切篇修复、引号装饰、按钮收小、时间胶囊到期通知、九色分享模板、周视图、外观三档、设置分区
+
+## 2026-11-24　v0.0.7（code 66）— MainActivity 拆分
+- versionCode 64 → 66
+- 新增 UiBuilder：整页控件搭建从 MainActivity 搬出（448 行）
+- 新增 TtsController：朗读状态机与排版从 MainActivity 搬出（399 行），TTS 状态随方法一起搬走
+- 新增 ImportManager：txt 导入、去重、已导入条目的列出与删除（353 行）
+- MainActivity 2520 → 1546 行；行为不变，构建通过，11 项纯逻辑测试仍全通过

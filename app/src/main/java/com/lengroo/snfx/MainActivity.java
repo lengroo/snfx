@@ -62,7 +62,7 @@ public class MainActivity extends Activity {
     private String[] baseHot = new String[0], baseHotEn = new String[0];
     private String[] impOwn = new String[0], impOwnEn = new String[0];
     private String[] impHot = new String[0], impHotEn = new String[0];
-    private static final int REQ_IMPORT = 1001;
+    static final int REQ_IMPORT = 1001;
     private int mode = 0;              // 0 原创 / 1 抖音热门
     private boolean randomMode = false; // false 默认（不重复） / true 纯随机
     private int lastOwn = -1, lastHot = -1;
@@ -80,17 +80,11 @@ public class MainActivity extends Activity {
     private Button favBtn;
     private Button speakBtn;
     private final ArrayList<Integer> history = new ArrayList<Integer>();
-    private TextToSpeech tts;
-    private boolean ttsReady = false;
-    private boolean speakingNow = false;
-    private boolean speakEnglish = false;
-    private boolean continuousActive = false;
     private boolean loadedOwn = false;
     private boolean loadedHot = false;
     private static final int REQ_BACKUP_EXPORT = 1002;
     private static final int REQ_BACKUP_IMPORT = 1003;
     private static final Random RNG = new Random();
-    private int textSizeLevel = 1;
     private int FIELD;
     private int HINT;
     private int flipStreak = 0;
@@ -98,9 +92,7 @@ public class MainActivity extends Activity {
     private java.util.Map<Character, String> pyMap;
     private String[] pyCacheOwn;
     private String[] pyCacheHot;
-    private int lineLevel = 1;
     private Button typeBtn;
-    private AlertDialog typeDialog;
     private TextView source;
     private ScrollView scroll;
     private float swipeSx, swipeSy;
@@ -109,6 +101,7 @@ public class MainActivity extends Activity {
     private Button toggle;
     private Button modeBtn;
     private SharedPreferences prefs;
+    private final TtsController ttsCtl = new TtsController();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,9 +115,9 @@ public class MainActivity extends Activity {
         readSeen("seen_own", seenOwn);
         readSeen("fav_own", favOwn);
         readSeen("fav_hot", favHot);
-        speakEnglish = prefs.getBoolean("speak_en", false);
-        textSizeLevel = prefs.getInt("text_size", 1);
-        lineLevel = prefs.getInt("line_space", 1);
+        ttsCtl.setSpeakEnglish(prefs.getBoolean("speak_en", false));
+        ttsCtl.setTextSizeLevel(prefs.getInt("text_size", 1));
+        ttsCtl.setLineLevel(prefs.getInt("line_space", 1));
         readSeen("seen_hot", seenHot);
 
         ensurePools(mode);
@@ -136,7 +129,21 @@ public class MainActivity extends Activity {
     }
 
     private void startUi(android.os.Bundle savedInstanceState) {
-        buildUi();
+        UiBuilder.Views v = UiBuilder.buildUi(this);
+        modeBtn = v.modeBtn;
+        todayBtn = v.todayBtn;
+        counter = v.counter;
+        source = v.source;
+        scroll = v.scroll;
+        body = v.body;
+        trans = v.trans;
+        favBtn = v.favBtn;
+        indexBtn = v.indexBtn;
+        speakBtn = v.speakBtn;
+        typeBtn = v.typeBtn;
+        toggle = v.toggle;
+        ttsCtl.applyTypography(this);
+        refreshLabels();
         if (savedInstanceState != null && savedInstanceState.containsKey("cur_idx")) {
             String[] pool = mode == 0 ? own : hot;
             int idx = savedInstanceState.getInt("cur_idx", 0);
@@ -229,7 +236,7 @@ public class MainActivity extends Activity {
         return r;
     }
 
-    private String readAll(InputStream in) throws Exception {
+    String readAll(InputStream in) throws Exception {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int n;
@@ -249,7 +256,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void ensurePools(int m) {
+    void ensurePools(int m) {
         if (m == 0 && !loadedOwn) {
             baseOwn = load("quotes.txt");
             baseOwnEn = load("quotes_en.txt");
@@ -261,14 +268,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void reloadImported() {
+    void reloadImported() {
         impOwn = loadCustom("custom_own.txt");
         impOwnEn = padTo(loadCustom("custom_own_en.txt"), impOwn.length);
         impHot = loadCustom("custom_hot.txt");
         impHotEn = padTo(loadCustom("custom_hot_en.txt"), impHot.length);
     }
 
-    private void rebuildPools() {
+    void rebuildPools() {
         own = concat(baseOwn, impOwn);
         ownEn = concat(baseOwnEn, impOwnEn);
         hot = concat(baseHot, impHot);
@@ -278,7 +285,7 @@ public class MainActivity extends Activity {
         pyCacheHot = null;
     }
 
-    private void writeCustom(String name, List<String> list) throws Exception {
+    void writeCustom(String name, List<String> list) throws Exception {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < list.size(); i++) {
             if (i > 0) sb.append(SEP);
@@ -290,545 +297,24 @@ public class MainActivity extends Activity {
     }
 
     // 导入格式：每行一篇；空行与 # 开头忽略；可写「中文|English」，英文可省略
-    private void importFromUri(Uri uri) {
-        try {
-            InputStream in = getContentResolver().openInputStream(uri);
-            String all = readAll(in);
-            in.close();
-            List<String> zh = new ArrayList<String>();
-            List<String> en = new ArrayList<String>();
-            String[] lines = all.split("\r?\n");
-            for (int i = 0; i < lines.length; i++) {
-                String ln = lines[i].trim();
-                if (ln.length() == 0) continue;
-                if (ln.startsWith("#")) continue;
-                String z = ln, e = "";
-                int bar = ln.indexOf('|');
-                if (bar < 0) bar = ln.indexOf((char) 0xFF5C);
-                if (bar > 0) {
-                    z = ln.substring(0, bar).trim();
-                    e = ln.substring(bar + 1).trim();
-                }
-                if (z.length() < 4) continue;
-                zh.add(z);
-                en.add(e);
-            }
-            if (zh.isEmpty()) {
-                Toast.makeText(this, "没读到可用文案，看看导入格式说明", Toast.LENGTH_LONG).show();
-                return;
-            }
-            List<String> cz = new ArrayList<String>();
-            List<String> ce = new ArrayList<String>();
-            String[] srcZ = mode == 0 ? impOwn : impHot;
-            String[] srcE = mode == 0 ? impOwnEn : impHotEn;
-            for (int i = 0; i < srcZ.length; i++) {
-                cz.add(srcZ[i]);
-                ce.add(i < srcE.length ? srcE[i] : "");
-            }
-            ensurePools(0);
-            ensurePools(1);
-            rebuildPools();
-            Set<String> have = new HashSet<String>();
-            for (String z : own) have.add(z.trim());
-            for (String z : hot) have.add(z.trim());
-            int added = 0;
-            for (int i = 0; i < zh.size(); i++) {
-                String z = zh.get(i);
-                if (have.contains(z)) continue;
-                have.add(z);
-                cz.add(z);
-                ce.add(en.get(i));
-                added++;
-            }
-            if (added == 0) {
-                Toast.makeText(this, "这些文案已经在里面了", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            if (mode == 0) {
-                writeCustom("custom_own.txt", cz);
-                writeCustom("custom_own_en.txt", ce);
-            } else {
-                writeCustom("custom_hot.txt", cz);
-                writeCustom("custom_hot_en.txt", ce);
-            }
-            reloadImported();
-            rebuildPools();
-            showNext();
-            Toast.makeText(this, "已导入 " + added + " 条到" + (mode == 0 ? "原创池" : "热门池"),
-                    Toast.LENGTH_SHORT).show();
-        } catch (Throwable t) {
-            Toast.makeText(this, "导入失败：" + t.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
-        }
-    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_IMPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            importFromUri(data.getData());
+            ImportManager.importFromUri(this, data.getData());
         }
         if (resultCode == RESULT_OK && BackupIO.handle(this, requestCode, resultCode, data)) {
             return;
         }
     }
 
-    private void pickTxt() {
-        try {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("text/plain");
-            startActivityForResult(i, REQ_IMPORT);
-        } catch (Throwable t) {
-            try {
-                Intent i2 = new Intent(Intent.ACTION_GET_CONTENT);
-                i2.setType("text/plain");
-                startActivityForResult(i2, REQ_IMPORT);
-            } catch (Throwable t2) {
-                Toast.makeText(this, "这台设备没有可用的文件选择器", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
 
-    private void showImportHelp() {
-        String NL = String.valueOf((char) 10);
-        String head = "导入你自己的 txt 到" + (mode == 0 ? "原创池" : "热门池") + "（当前这个池子）";
-        String l1 = "格式：一行一篇";
-        String l2 = "· 空行会被忽略";
-        String l3 = "· 以 # 开头的行是注释，也会忽略";
-        String l4 = "· 想带英文就写「中文|English」，竖线用英文或中文的都行";
-        String l5 = "· 不写英文也可以，英文那行会空着";
-        String l6 = "· 每篇 4 个字以上才会被收下";
-        String eg = "示例：";
-        String e1 = "# 我自己的文案";
-        String e2 = "你别再试探我了，我不会心软的。|Stop testing me. I will not soften.";
-        String e3 = "我的心是水泥做的，捂不热，也砸不碎。";
-        String tail = "重复的会被跳过；导入后接在池子末尾。";
-        StringBuilder sb = new StringBuilder();
-        sb.append(head).append(NL).append(NL);
-        sb.append(l1).append(NL);
-        sb.append(l2).append(NL).append(l3).append(NL);
-        sb.append(l4).append(NL).append(l5).append(NL).append(l6).append(NL).append(NL);
-        sb.append(eg).append(NL).append(e1).append(NL);
-        sb.append(e2).append(NL).append(e3).append(NL).append(NL).append(tail);
-        TextView tip = new TextView(this);
-        tip.setText(sb.toString());
-        tip.setTextColor(TEXT);
-        tip.setTextSize(13);
-        tip.setLineSpacing(dp(5), 1f);
-        tip.setPadding((int) dp(20), (int) dp(16), (int) dp(20), (int) dp(8));
-        TextView dlgTitle = new TextView(this);
-        dlgTitle.setText("导入 txt");
-        dlgTitle.setTextColor(TEXT);
-        dlgTitle.setTextSize(17);
-        dlgTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        dlgTitle.setPadding((int) dp(20), (int) dp(18), (int) dp(20), 0);
-
-        ScrollView sv = new ScrollView(this);
-        sv.addView(tip);
-
-        LinearLayout dlgBox = new LinearLayout(this);
-        dlgBox.setOrientation(LinearLayout.VERTICAL);
-        dlgBox.addView(dlgTitle);
-        dlgBox.addView(sv);
-
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(dlgBox)
-                .setPositiveButton("选择文件", new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int w) {
-                        pickTxt();
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .setNeutralButton("管理已导入", new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int w) {
-                        showImportManager();
-                    }
-                })
-                .show();
-        styleDialog(dlg);
-    }
 
     private void styleDialog(AlertDialog d) {
         ThemeKit.styleDialog(d);
     }
 
-    private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
-        root.setFitsSystemWindows(true);
-
-        LinearLayout headerRow = new LinearLayout(this);
-        headerRow.setOrientation(LinearLayout.HORIZONTAL);
-        headerRow.setGravity(Gravity.CENTER_VERTICAL);
-        headerRow.setPadding((int) dp(20), (int) dp(18), (int) dp(14), 0);
-
-        TextView title = new TextView(this);
-        title.setText("每日一遍");
-        title.setTextColor(TEXT);
-        title.setTextSize(22);
-        if (android.os.Build.VERSION.SDK_INT >= 26) {
-            title.setAutoSizeTextTypeUniformWithConfiguration(15, 22, 1,
-                    android.util.TypedValue.COMPLEX_UNIT_SP);
-        }
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        titleRow.addView(title);
-
-        modeBtn = new Button(this);
-        modeBtn.setAllCaps(false);
-        modeBtn.setTextSize(11);
-        modeBtn.setTextColor(ACCENT);
-        modeBtn.setPadding((int) dp(8), 0, (int) dp(8), 0);
-        modeBtn.setMinWidth(0);
-        modeBtn.setMinimumWidth(0);
-        modeBtn.setMinHeight(0);
-        modeBtn.setMinimumHeight(0);
-        modeBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        modeBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                randomMode = !randomMode;
-                prefs.edit().putBoolean("random_mode", randomMode).apply();
-                refreshLabels();
-                showNext();
-            }
-        });
-        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        mlp.leftMargin = (int) dp(8);
-        titleRow.addView(modeBtn, mlp);
-
-        todayBtn = new Button(this);
-        todayBtn.setText("今日");
-        todayBtn.setAllCaps(false);
-        todayBtn.setTextSize(11);
-        todayBtn.setTextColor(SUB);
-        todayBtn.setPadding((int) dp(8), 0, (int) dp(8), 0);
-        todayBtn.setMinWidth(0);
-        todayBtn.setMinimumWidth(0);
-        todayBtn.setMinHeight(0);
-        todayBtn.setMinimumHeight(0);
-        todayBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        todayBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showToday();
-            }
-        });
-        LinearLayout.LayoutParams tdLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        tdLp.leftMargin = (int) dp(6);
-        titleRow.addView(todayBtn, tdLp);
-
-        Button reviewBtn = new Button(this);
-        reviewBtn.setText("回顾");
-        reviewBtn.setAllCaps(false);
-        reviewBtn.setTextSize(11);
-        reviewBtn.setTextColor(SUB);
-        reviewBtn.setPadding((int) dp(8), 0, (int) dp(8), 0);
-        reviewBtn.setMinWidth(0);
-        reviewBtn.setMinimumWidth(0);
-        reviewBtn.setMinHeight(0);
-        reviewBtn.setMinimumHeight(0);
-        reviewBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        reviewBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showReview();
-            }
-        });
-        LinearLayout.LayoutParams rvLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        rvLp.leftMargin = (int) dp(6);
-        titleRow.addView(reviewBtn, rvLp);
-
-        LinearLayout topButtons = new LinearLayout(this);
-        topButtons.setOrientation(LinearLayout.HORIZONTAL);
-        topButtons.setGravity(Gravity.CENTER_VERTICAL);
-
-        Button settings = new Button(this);
-        settings.setText("设置");
-        settings.setAllCaps(false);
-        settings.setTextSize(10);
-        settings.setTextColor(SUB);
-        settings.setPadding((int) dp(9), 0, (int) dp(9), 0);
-        settings.setMinWidth(0);
-        settings.setMinimumWidth(0);
-        settings.setMinHeight(0);
-        settings.setMinimumHeight(0);
-        settings.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        settings.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showSettings();
-            }
-        });
-        topButtons.addView(settings, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28)));
-
-        Button about = new Button(this);
-        about.setText("作者");
-        about.setAllCaps(false);
-        about.setTextSize(10);
-        about.setTextColor(SUB);
-        about.setPadding((int) dp(9), 0, (int) dp(9), 0);
-        about.setMinWidth(0);
-        about.setMinimumWidth(0);
-        about.setMinHeight(0);
-        about.setMinimumHeight(0);
-        about.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        about.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showAbout();
-            }
-        });
-        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        alp.leftMargin = (int) dp(6);
-        topButtons.addView(about, alp);
-
-        Button importer = new Button(this);
-        importer.setText("导入");
-        importer.setAllCaps(false);
-        importer.setTextSize(10);
-        importer.setTextColor(SUB);
-        importer.setPadding((int) dp(9), 0, (int) dp(9), 0);
-        importer.setMinWidth(0);
-        importer.setMinimumWidth(0);
-        importer.setMinHeight(0);
-        importer.setMinimumHeight(0);
-        importer.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        importer.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showImportHelp();
-            }
-        });
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        ilp.leftMargin = (int) dp(6);
-        topButtons.addView(importer, ilp);
-
-        headerRow.addView(titleRow, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        headerRow.addView(topButtons);
-        root.addView(headerRow);
-
-        LinearLayout meta = new LinearLayout(this);
-        meta.setOrientation(LinearLayout.HORIZONTAL);
-        meta.setGravity(Gravity.CENTER_VERTICAL);
-        meta.setPadding((int) dp(20), (int) dp(8), 0, 0);
-
-        View dot = new View(this);
-        dot.setBackground(round(ACCENT, dp(3)));
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams((int) dp(6), (int) dp(6));
-        dlp.rightMargin = (int) dp(8);
-        meta.addView(dot, dlp);
-
-        counter = new TextView(this);
-        counter.setTextColor(SUB);
-        counter.setTextSize(11);
-        counter.setSingleLine(true);
-        counter.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        meta.addView(counter);
-        root.addView(meta);
-
-        source = new TextView(this);
-        source.setTextColor(SUB);
-        source.setTextSize(11);
-        source.setPadding((int) dp(20), (int) dp(6), 0, 0);
-        root.addView(source);
-
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(CARD, dp(18)));
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        clp.leftMargin = (int) dp(16);
-        clp.rightMargin = (int) dp(16);
-        clp.bottomMargin = (int) dp(10);
-
-        ScrollView sv = new ScrollView(this);
-        sv.setFillViewport(true);
-        sv.setVerticalScrollBarEnabled(false);
-        sv.setHorizontalScrollBarEnabled(false);
-        scroll = sv;
-        body = new TextView(this);
-        body.setTextColor(TEXT);
-        body.setTextSize(16);
-        body.setLineSpacing(dp(9), 1f);
-        body.setPadding((int) dp(20), (int) dp(20), (int) dp(20), (int) dp(6));
-        body.setTypeface(Typeface.create("serif", Typeface.NORMAL));
-        body.setOnLongClickListener(new View.OnLongClickListener() {
-            public boolean onLongClick(View v) {
-                showActions();
-                return true;
-            }
-        });
-        LinearLayout textCol = new LinearLayout(this);
-        textCol.setOrientation(LinearLayout.VERTICAL);
-        textCol.setGravity(Gravity.CENTER_VERTICAL);
-        TextView mark = new TextView(this);
-        mark.setText("\u201c");
-        mark.setTextColor(0x1AFFFFFF);
-        mark.setTextSize(48);
-        mark.setTypeface(Typeface.create("serif", Typeface.NORMAL));
-        mark.setPadding((int) dp(20), (int) dp(16), (int) dp(20), 0);
-        textCol.addView(mark, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        textCol.addView(body, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        trans = new TextView(this);
-        trans.setTextColor(0xFF8A8A94);
-        trans.setTextSize(13);
-        trans.setLineSpacing(dp(6), 1f);
-        trans.setPadding((int) dp(20), 0, (int) dp(20), (int) dp(20));
-        trans.setTypeface(Typeface.create("serif", Typeface.NORMAL));
-        textCol.addView(trans, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        sv.addView(textCol, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        card.addView(sv, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setGravity(Gravity.CENTER);
-        footer.setPadding(0, 0, 0, (int) dp(10));
-        favBtn = new Button(this);
-        favBtn.setText("收藏");
-        favBtn.setAllCaps(false);
-        favBtn.setTextSize(11);
-        favBtn.setTextColor(0xFF8A8A94);
-        favBtn.setPadding((int) dp(16), 0, (int) dp(16), 0);
-        favBtn.setMinWidth(0);
-        favBtn.setMinimumWidth(0);
-        favBtn.setMinHeight(0);
-        favBtn.setMinimumHeight(0);
-        favBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        favBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showFavs();
-            }
-        });
-        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        flp.rightMargin = (int) dp(8);
-        footer.addView(favBtn, flp);
-
-        indexBtn = new Button(this);
-        indexBtn.setAllCaps(false);
-        indexBtn.setTextSize(11);
-        indexBtn.setTextColor(ACCENT);
-        indexBtn.setPadding((int) dp(16), 0, (int) dp(16), 0);
-        indexBtn.setMinWidth(0);
-        indexBtn.setMinimumWidth(0);
-        indexBtn.setMinHeight(0);
-        indexBtn.setMinimumHeight(0);
-        indexBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        indexBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showIndex();
-            }
-        });
-        footer.addView(indexBtn, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28)));
-
-        speakBtn = new Button(this);
-        speakBtn.setText("朗读");
-        speakBtn.setAllCaps(false);
-        speakBtn.setTextSize(11);
-        speakBtn.setTextColor(0xFF8A8A94);
-        speakBtn.setPadding((int) dp(16), 0, (int) dp(16), 0);
-        speakBtn.setMinWidth(0);
-        speakBtn.setMinimumWidth(0);
-        speakBtn.setMinHeight(0);
-        speakBtn.setMinimumHeight(0);
-        speakBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        speakBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                toggleSpeak();
-            }
-        });
-        speakBtn.setOnLongClickListener(new View.OnLongClickListener() {
-            public boolean onLongClick(View v) {
-                showSpeakLang();
-                return true;
-            }
-        });
-        LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        slp2.leftMargin = (int) dp(8);
-        footer.addView(speakBtn, slp2);
-        typeBtn = new Button(this);
-        typeBtn.setText("Aa");
-        typeBtn.setAllCaps(false);
-        typeBtn.setTextSize(12);
-        typeBtn.setTextColor(0xFF8A8A94);
-        typeBtn.setPadding((int) dp(14), 0, (int) dp(14), 0);
-        typeBtn.setMinWidth(0);
-        typeBtn.setMinimumWidth(0);
-        typeBtn.setMinHeight(0);
-        typeBtn.setMinimumHeight(0);
-        typeBtn.setBackground(ripple(outline(0x00000000, LINE, dp(14)), RIPPLE));
-        typeBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showTypography();
-            }
-        });
-        LinearLayout.LayoutParams tlp2 = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, (int) dp(28));
-        tlp2.leftMargin = (int) dp(8);
-        footer.addView(typeBtn, tlp2);
-
-        card.addView(footer);
-
-        root.addView(card, clp);
-
-        Button btn = new Button(this);
-        btn.setText("换一篇");
-        btn.setAllCaps(false);
-        btn.setTextSize(16);
-        btn.setTextColor(0xFF12060A);
-        btn.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        btn.setBackground(ripple(round(ACCENT, dp(16)), 0x33FFFFFF));
-        btn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                showNext();
-            }
-        });
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(52));
-        blp.leftMargin = (int) dp(16);
-        blp.rightMargin = (int) dp(16);
-        blp.bottomMargin = (int) dp(8);
-        root.addView(btn, blp);
-
-        toggle = new Button(this);
-        toggle.setAllCaps(false);
-        toggle.setTextSize(13);
-        toggle.setTextColor(ACCENT);
-        toggle.setBackground(ripple(round(0x00000000, dp(16)), RIPPLE));
-        toggle.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                mode = 1 - mode;
-                prefs.edit().putInt("mode", mode).apply();
-                ensurePools(mode);
-                rebuildPools();
-                refreshLabels();
-                showNext();
-            }
-        });
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(40));
-        tlp.leftMargin = (int) dp(16);
-        tlp.rightMargin = (int) dp(16);
-        tlp.bottomMargin = (int) dp(20);
-        root.addView(toggle, tlp);
-
-        setContentView(root);
-        applyTypography();
-        refreshLabels();
-    }
 
     @Override
     public boolean dispatchTouchEvent(android.view.MotionEvent e) {
@@ -877,7 +363,7 @@ public class MainActivity extends Activity {
         return super.dispatchTouchEvent(e);
     }
 
-    private void showAbout() {
+    void showAbout() {
         // The app theme is Theme.Material (light), so a stock AlertDialog
         // is light — but the content text here is near-white, which made
         // the author line invisible. Build the dialog dark end to end:
@@ -970,6 +456,20 @@ public class MainActivity extends Activity {
         }
     }
 
+    void shiftAllSetsAfterDelete(int removed) {
+        shiftSetAfterDelete(seenOwn, removed);
+        shiftSetAfterDelete(seenHot, removed);
+        shiftSetAfterDelete(favOwn, removed);
+        shiftSetAfterDelete(favHot, removed);
+    }
+
+    void removeFromAllSets(int from) {
+        removeFrom(seenOwn, from);
+        removeFrom(seenHot, from);
+        removeFrom(favOwn, from);
+        removeFrom(favHot, from);
+    }
+
     private void removeFrom(Set<Integer> set, int from) {
         List<Integer> drop = new ArrayList<Integer>();
         for (Integer v : set) {
@@ -987,192 +487,16 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void persistAllSets() {
+    void persistAllSets() {
         prefs.edit().putString("seen_own", writeSeen(seenOwn))
                 .putString("seen_hot", writeSeen(seenHot))
                 .putString("fav_own", writeSeen(favOwn))
                 .putString("fav_hot", writeSeen(favHot)).apply();
     }
 
-    private void deleteImported(int pos) {
-        String[] src = mode == 0 ? impOwn : impHot;
-        String[] srcEn = mode == 0 ? impOwnEn : impHotEn;
-        if (pos < 0 || pos >= src.length) return;
-        int baseLen = (mode == 0 ? baseOwn : baseHot).length;
-        int globalIdx = baseLen + pos;
-        List<String> z = new ArrayList<String>();
-        List<String> e = new ArrayList<String>();
-        for (int i = 0; i < src.length; i++) {
-            if (i == pos) continue;
-            z.add(src[i]);
-            e.add(i < srcEn.length ? srcEn[i] : "");
-        }
-        try {
-            if (mode == 0) {
-                writeCustom("custom_own.txt", z);
-                writeCustom("custom_own_en.txt", e);
-            } else {
-                writeCustom("custom_hot.txt", z);
-                writeCustom("custom_hot_en.txt", e);
-            }
-        } catch (Throwable t) {
-            Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        shiftSetAfterDelete(seenOwn, globalIdx);
-        shiftSetAfterDelete(seenHot, globalIdx);
-        shiftSetAfterDelete(favOwn, globalIdx);
-        shiftSetAfterDelete(favHot, globalIdx);
-        persistAllSets();
-        reloadImported();
-        rebuildPools();
-        if (currentIndex > globalIdx) currentIndex--;
-        else if (currentIndex == globalIdx) currentIndex = Math.max(0, globalIdx - 1);
-        renderIndex(currentIndex);
-        Toast.makeText(this, "已删除这条导入的文案", Toast.LENGTH_SHORT).show();
-    }
 
-    private void clearImported() {
-        int baseLen = (mode == 0 ? baseOwn : baseHot).length;
-        try {
-            if (mode == 0) {
-                writeCustom("custom_own.txt", new ArrayList<String>());
-                writeCustom("custom_own_en.txt", new ArrayList<String>());
-            } else {
-                writeCustom("custom_hot.txt", new ArrayList<String>());
-                writeCustom("custom_hot_en.txt", new ArrayList<String>());
-            }
-        } catch (Throwable t) {
-            Toast.makeText(this, "清空失败", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        removeFrom(seenOwn, baseLen);
-        removeFrom(seenHot, baseLen);
-        removeFrom(favOwn, baseLen);
-        removeFrom(favHot, baseLen);
-        persistAllSets();
-        reloadImported();
-        rebuildPools();
-        currentIndex = 0;
-        renderIndex(0);
-        Toast.makeText(this, "已清空导入的文案", Toast.LENGTH_SHORT).show();
-    }
 
-    private void showImportManager() {
-        final String[] src = mode == 0 ? impOwn : impHot;
-        if (src.length == 0) {
-            Toast.makeText(this, "还没有导入过文案", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        List<String> items = new ArrayList<String>();
-        for (int i = 0; i < src.length; i++) {
-            String t = src[i].replace(String.valueOf((char) 10), " ").trim();
-            if (t.length() > 26) t = t.substring(0, 26) + "…";
-            items.add((i + 1) + ".  " + t);
-        }
-        ArrayAdapter<String> ad = new ArrayAdapter<String>(this,
-                android.R.layout.simple_list_item_1, items) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                TextView tv = (TextView) super.getView(position, convertView, parent);
-                tv.setTextColor(TEXT);
-                tv.setTextSize(13);
-                tv.setPadding((int) dp(18), (int) dp(12), (int) dp(18), (int) dp(12));
-                tv.setSingleLine(true);
-                tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                return tv;
-            }
-        };
-        ListView lv = new ListView(this);
-        lv.setAdapter(ad);
-        lv.setBackgroundColor(CARD);
-        lv.setDivider(null);
-        lv.setDividerHeight(0);
-        lv.setCacheColorHint(0);
 
-        TextView title = new TextView(this);
-        title.setText("我导入的 · 共 " + src.length + " 篇");
-        title.setTextColor(TEXT);
-        title.setTextSize(17);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        title.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(4));
-
-        TextView hint = new TextView(this);
-        hint.setText("点开跳到那篇，长按删除这一条");
-        hint.setTextColor(0xFF6E6E78);
-        hint.setTextSize(11);
-        hint.setPadding((int) dp(20), 0, (int) dp(20), (int) dp(8));
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(CARD);
-        box.addView(title);
-        box.addView(hint);
-        box.addView(lv, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(420)));
-
-        final AlertDialog[] holder = new AlertDialog[1];
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(box)
-                .setPositiveButton("清空全部", new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int w) {
-                        confirmClearImported();
-                    }
-                })
-                .setNegativeButton("关闭", null)
-                .show();
-        holder[0] = dlg;
-        styleDialog(dlg);
-        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                int baseLen = (mode == 0 ? baseOwn : baseHot).length;
-                jumpTo(baseLen + position);
-                if (holder[0] != null) holder[0].dismiss();
-            }
-        });
-        lv.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
-            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-                deleteImported(position);
-                if (holder[0] != null) holder[0].dismiss();
-                showImportManager();
-                return true;
-            }
-        });
-    }
-
-    private void confirmClearImported() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(CARD);
-        box.setPadding((int) dp(22), (int) dp(20), (int) dp(22), (int) dp(6));
-
-        TextView t = new TextView(this);
-        t.setText("清空导入的文案？");
-        t.setTextColor(TEXT);
-        t.setTextSize(17);
-        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        box.addView(t);
-
-        TextView m = new TextView(this);
-        m.setText("会把当前池子里你自己导入的 "
-                + (mode == 0 ? impOwn.length : impHot.length) + " 条全部删掉，内置文案不受影响。");
-        m.setTextColor(SUB);
-        m.setTextSize(13);
-        m.setLineSpacing(dp(5), 1f);
-        m.setPadding(0, (int) dp(10), 0, 0);
-        box.addView(m);
-
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(box)
-                .setPositiveButton("清空", new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int w) {
-                        clearImported();
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .show();
-        styleDialog(dlg);
-    }
 
     private void showSecret() {
         String text = "";
@@ -1218,16 +542,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onStop() {
         super.onStop();
-        if (speakingNow) stopSpeak();
+        if (ttsCtl.isSpeakingNow()) ttsCtl.stopSpeak(this);
     }
 
     @Override
     protected void onDestroy() {
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-            tts = null;
-        }
+        ttsCtl.shutdown();
         super.onDestroy();
     }
 
@@ -1237,7 +557,23 @@ public class MainActivity extends Activity {
         outState.putInt("cur_idx", currentIndex);
     }
 
-    private void refreshLabels() {
+    void toggleRandomMode() {
+        randomMode = !randomMode;
+        prefs.edit().putBoolean("random_mode", randomMode).apply();
+        refreshLabels();
+        showNext();
+    }
+
+    void toggleMode() {
+        mode = 1 - mode;
+        prefs.edit().putInt("mode", mode).apply();
+        ensurePools(mode);
+        rebuildPools();
+        refreshLabels();
+        showNext();
+    }
+
+    void refreshLabels() {
         if (toggle != null) {
             toggle.setText(mode == 0 ? "切到抖音热门" : "切回原创文案");
         }
@@ -1263,7 +599,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void showNext() {
+    void showNext() {
         String[] pool = mode == 0 ? own : hot;
         int last = mode == 0 ? lastOwn : lastHot;
         if (pool.length == 0) {
@@ -1351,386 +687,25 @@ public class MainActivity extends Activity {
         renderIndex(prev, -1);
     }
 
-    private void toggleSpeak() {
-        if (speakingNow) {
-            stopSpeak();
-            Toast.makeText(this, "已停止朗读", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (body.getText().toString().trim().length() == 0) return;
-        if (tts != null && ttsReady) {
-            speakNow();
-            return;
-        }
-        if (tts != null) {
-            try {
-                tts.shutdown();
-            } catch (Throwable ignored) {
-            }
-            tts = null;
-            ttsReady = false;
-        }
-        tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
-            public void onInit(int status) {
-                if (status == TextToSpeech.SUCCESS && tts != null) {
-                    tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-                        @Override
-                        public void onStart(String utteranceId) {
-                        }
 
-                        @Override
-                        public void onDone(String utteranceId) {
-                            runOnUiThread(new Runnable() {
-                                public void run() {
-                                    speakingNow = false;
-                                    updateSpeakLabel();
-                                    if (continuousActive && prefs.getBoolean("continuous", false)) {
-                                        final android.os.Handler h = new android.os.Handler(
-                                                android.os.Looper.getMainLooper());
-                                        h.postDelayed(new Runnable() {
-                                            public void run() {
-                                                if (!continuousActive) return;
-                                                showNext();
-                                                h.postDelayed(new Runnable() {
-                                                    public void run() {
-                                                        if (continuousActive && !speakingNow) toggleSpeak();
-                                                    }
-                                                }, 600);
-                                            }
-                                        }, 400);
-                                    }
-                                }
-                            });
-                        }
 
-                        @Override
-                        public void onError(String utteranceId) {
-                            runOnUiThread(new Runnable() {
-                                public void run() {
-                                    speakingNow = false;
-                                    updateSpeakLabel();
-                                }
-                            });
-                        }
-                    });
-                    ttsReady = true;
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            speakNow();
-                        }
-                    });
-                } else {
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            showTtsHelp("系统里没有可用的语音引擎（TTS），多半是没装或没启用。");
-                        }
-                    });
-                }
-            }
-        });
-    }
 
-    private void showTtsHelp(String why) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(CARD);
-        box.setPadding((int) dp(22), (int) dp(20), (int) dp(22), (int) dp(6));
 
-        TextView t = new TextView(this);
-        t.setText("语音引擎初始化失败");
-        t.setTextColor(TEXT);
-        t.setTextSize(17);
-        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        box.addView(t);
 
-        TextView m = new TextView(this);
-        m.setText(why + String.valueOf((char) 10) + String.valueOf((char) 10) +
-                "可以到系统「设置 → 无障碍 → 文字转语音(TTS)」里安装 / 启用一个引擎并选中文，然后回来点「重试」。");
-        m.setTextColor(SUB);
-        m.setTextSize(13);
-        m.setLineSpacing(dp(5), 1f);
-        m.setPadding(0, (int) dp(10), 0, (int) dp(6));
-        box.addView(m);
 
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(box)
-                .setPositiveButton("打开语音设置", new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int w) {
-                        openTtsSettings();
-                    }
-                })
-                .setNeutralButton("重试", new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int w) {
-                        tts = null;
-                        ttsReady = false;
-                        toggleSpeak();
-                    }
-                })
-                .setNegativeButton("关闭", null)
-                .show();
-        styleDialog(dlg);
-    }
 
-    private void openTtsSettings() {
-        String[] actions = new String[]{
-                "com.android.settings.TTS_SETTINGS",
-                "com.android.settings.Settings$TextToSpeechSettingsActivity",
-                android.provider.Settings.ACTION_SETTINGS
-        };
-        for (int i = 0; i < actions.length; i++) {
-            try {
-                startActivity(new Intent(actions[i]));
-                return;
-            } catch (Throwable ignored) {
-            }
-        }
-    }
 
-    private void applyTypography() {
-        int[] zh = new int[]{14, 16, 18, 21};
-        int[] en = new int[]{11, 13, 15, 17};
-        int[] zl = new int[]{6, 9, 13};
-        int[] el = new int[]{4, 6, 9};
-        int ts = Math.max(0, Math.min(textSizeLevel, zh.length - 1));
-        int ls = Math.max(0, Math.min(lineLevel, zl.length - 1));
-        if (body != null) {
-            body.setTextSize(zh[ts]);
-            body.setLineSpacing(dp(zl[ls]), 1f);
-        }
-        if (trans != null) {
-            trans.setTextSize(en[ts]);
-            trans.setLineSpacing(dp(el[ls]), 1f);
-        }
-    }
 
-    private void showTypography() {
-        if (typeDialog != null && typeDialog.isShowing()) {
-            typeDialog.dismiss();
-        }
-        typeDialog = null;
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(CARD);
-        box.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(6));
 
-        TextView title = new TextView(this);
-        title.setText("排版");
-        title.setTextColor(TEXT);
-        title.setTextSize(17);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        title.setPadding(0, 0, 0, (int) dp(12));
-        box.addView(title);
 
-        box.addView(labelRow("字号"));
-        final String[] sizeNames = new String[]{"小", "标准", "大", "特大"};
-        LinearLayout sizeRow = new LinearLayout(this);
-        sizeRow.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < sizeNames.length; i++) {
-            final int which = i;
-            sizeRow.addView(chip(sizeNames[i], textSizeLevel == i, new View.OnClickListener() {
-                public void onClick(View v) {
-                    textSizeLevel = which;
-                    prefs.edit().putInt("text_size", textSizeLevel).apply();
-                    applyTypography();
-                    showTypography();
-                }
-            }), chipParams(i == 0 ? 0 : 8));
-        }
-        box.addView(sizeRow);
 
-        TextView gap = new TextView(this);
-        gap.setText("");
-        gap.setHeight((int) dp(10));
-        box.addView(gap);
-
-        box.addView(labelRow("行距"));
-        final String[] lineNames = new String[]{"紧凑", "标准", "宽松"};
-        LinearLayout lineRow = new LinearLayout(this);
-        lineRow.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < lineNames.length; i++) {
-            final int which = i;
-            lineRow.addView(chip(lineNames[i], lineLevel == i, new View.OnClickListener() {
-                public void onClick(View v) {
-                    lineLevel = which;
-                    prefs.edit().putInt("line_space", lineLevel).apply();
-                    applyTypography();
-                    showTypography();
-                }
-            }), chipParams(i == 0 ? 0 : 8));
-        }
-        box.addView(lineRow);
-
-        TextView tip = new TextView(this);
-        tip.setText("中文与英文会一起缩放，设置会记住。");
-        tip.setTextColor(SUB);
-        tip.setTextSize(11);
-        tip.setPadding(0, (int) dp(14), 0, 0);
-        box.addView(tip);
-
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(box)
-                .setNegativeButton("关闭", null)
-                .show();
-        typeDialog = dlg;
-        styleDialog(dlg);
-    }
-
-    private TextView labelRow(String text) {
-        TextView t = new TextView(this);
-        t.setText(text);
-        t.setTextColor(SUB);
-        t.setTextSize(12);
-        t.setPadding(0, (int) dp(4), 0, (int) dp(8));
-        return t;
-    }
-
-    private LinearLayout.LayoutParams chipParams(int leftMargin) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                0, (int) dp(34), 1f);
-        lp.leftMargin = (int) dp(leftMargin);
-        return lp;
-    }
-
-    private TextView chip(String text, boolean on, View.OnClickListener l) {
-        TextView t = new TextView(this);
-        t.setText(text);
-        t.setTextSize(13);
-        t.setGravity(Gravity.CENTER);
-        t.setTextColor(on ? ACCENT : TEXT);
-        t.setBackground(outline(on ? 0x22FF5A7A : 0x00000000, on ? ACCENT : LINE, dp(12)));
-        t.setOnClickListener(l);
-        return t;
-    }
-
-    private void speakNow() {
-        if (tts == null || !ttsReady) return;
-        String text = speakEnglish
-                ? (trans != null ? trans.getText().toString().trim() : "")
-                : body.getText().toString().trim();
-        if (text.length() == 0) {
-            Toast.makeText(this, speakEnglish ? "这篇没有英文译文" : "没有可朗读的文字",
-                    Toast.LENGTH_SHORT).show();
-            return;
-        }
-        int r = tts.setLanguage(speakEnglish ? Locale.US : Locale.SIMPLIFIED_CHINESE);
-        if (!speakEnglish && (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED)) {
-            r = tts.setLanguage(Locale.CHINESE);
-        }
-        if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
-            showTtsHelp(speakEnglish ? "语音引擎里没有英文语音包。" : "语音引擎里没有中文语音包。");
-            return;
-        }
-        tts.setSpeechRate(prefs.getInt("speak_rate", 95) / 100f);
-        speakingNow = true;
-        continuousActive = true;
-        updateSpeakLabel();
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "snfx");
-        Toast.makeText(this, "朗读中（" + (speakEnglish ? "英文" : "中文") + "）· 点底部「停止」可结束",
-                Toast.LENGTH_SHORT).show();
-    }
-
-    private void showSpeakLang() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(CARD);
-        box.setPadding((int) dp(20), (int) dp(18), (int) dp(20), (int) dp(6));
-
-        TextView title = new TextView(this);
-        title.setText("朗读");
-        title.setTextColor(TEXT);
-        title.setTextSize(17);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        title.setPadding(0, 0, 0, (int) dp(10));
-        box.addView(title);
-
-        String[] names = new String[]{"中文（默认）", "English"};
-        boolean[] checked = new boolean[]{!speakEnglish, speakEnglish};
-        final AlertDialog[] holder = new AlertDialog[1];
-        for (int i = 0; i < names.length; i++) {
-            final int which = i;
-            final boolean on = checked[i];
-            TextView row = new TextView(this);
-            row.setText((on ? "✓  " : "     ") + names[i]);
-            row.setTextColor(on ? ACCENT : TEXT);
-            row.setTextSize(15);
-            row.setPadding((int) dp(8), (int) dp(16), (int) dp(8), (int) dp(16));
-            row.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    if (holder[0] != null) holder[0].dismiss();
-                    if (speakingNow) stopSpeak();
-                    speakEnglish = which == 1;
-                    prefs.edit().putBoolean("speak_en", speakEnglish).apply();
-                    Toast.makeText(MainActivity.this,
-                            "朗读语言：" + (speakEnglish ? "英文" : "中文"), Toast.LENGTH_SHORT).show();
-                }
-            });
-            box.addView(row);
-        }
-
-        View line = new View(this);
-        line.setBackgroundColor(LINE);
-        LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) dp(1)));
-        lineLp.topMargin = (int) dp(12);
-        lineLp.bottomMargin = (int) dp(4);
-        box.addView(line, lineLp);
-
-        final TextView rateLabel = new TextView(this);
-        rateLabel.setText("语速 " + String.format("%.2f", prefs.getInt("speak_rate", 95) / 100f));
-        rateLabel.setTextColor(SUB);
-        rateLabel.setTextSize(12);
-        rateLabel.setPadding(0, (int) dp(10), 0, 0);
-        box.addView(rateLabel);
-
-        android.widget.SeekBar bar = new android.widget.SeekBar(this);
-        bar.setMax(60);
-        bar.setProgress(Math.max(0, Math.min(60, prefs.getInt("speak_rate", 95) - 70)));
-        bar.setPadding(0, (int) dp(4), 0, (int) dp(2));
-        bar.setTag(rateLabel);
-        bar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(android.widget.SeekBar sb, int p, boolean fromUser) {
-                int rate = 70 + p;
-                prefs.edit().putInt("speak_rate", rate).apply();
-                ((TextView) sb.getTag()).setText("语速 " + String.format("%.2f", rate / 100f));
-            }
-
-            public void onStartTrackingTouch(android.widget.SeekBar sb) {
-            }
-
-            public void onStopTrackingTouch(android.widget.SeekBar sb) {
-            }
-        });
-        box.addView(bar);
-
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setView(box)
-                .setNegativeButton("关闭", null)
-                .show();
-        holder[0] = dlg;
-        styleDialog(dlg);
-    }
-
-    private void stopSpeak() {
-        speakingNow = false;
-        continuousActive = false;
-        updateSpeakLabel();
-        if (tts != null) tts.stop();
-    }
-
-    private void updateSpeakLabel() {
-        if (speakBtn != null) {
-            speakBtn.setText(speakingNow ? "停止" : "朗读");
-            speakBtn.setTextColor(speakingNow ? ACCENT : 0xFF8A8A94);
-        }
-    }
-
-    private void renderIndex(int idx) {
+    void renderIndex(int idx) {
         renderIndex(idx, 0);
     }
 
     /** 翻篇：dir = 1 往前翻（内容从右滑进来），-1 往回翻（从左滑进来），0 不滑动。 */
-    private void renderIndex(int idx, int dir) {
-        if (speakingNow) stopSpeak();
+    void renderIndex(int idx, int dir) {
+        if (ttsCtl.isSpeakingNow()) ttsCtl.stopSpeak(this);
         currentIndex = idx;
         String[] pool = mode == 0 ? own : hot;
         String[] enPool = mode == 0 ? ownEn : hotEn;
@@ -1770,7 +745,7 @@ public class MainActivity extends Activity {
         if (favBtn != null) favBtn.setText("收藏 · " + (mode == 0 ? favOwn : favHot).size());
     }
 
-    private void jumpTo(int idx) {
+    void jumpTo(int idx) {
         String[] pool = mode == 0 ? own : hot;
         if (idx < 0 || idx >= pool.length) return;
         Set<Integer> seen = mode == 0 ? seenOwn : seenHot;
@@ -1790,6 +765,57 @@ public class MainActivity extends Activity {
         ed.apply();
         pushHistory(idx);
         renderIndex(idx, 1);
+    }
+
+    TtsController ttsCtl() {
+        return ttsCtl;
+    }
+
+    TextView bodyView() {
+        return body;
+    }
+
+    TextView transView() {
+        return trans;
+    }
+
+    void setSpeakLabel(boolean speaking) {
+        if (speakBtn != null) {
+            speakBtn.setText(speaking ? "停止" : "朗读");
+            speakBtn.setTextColor(speaking ? ACCENT : 0xFF8A8A94);
+        }
+    }
+
+    int mode() {
+        return mode;
+    }
+
+    String[] importPool() {
+        return mode == 0 ? impOwn : impHot;
+    }
+
+    String[] importPoolEn() {
+        return mode == 0 ? impOwnEn : impHotEn;
+    }
+
+    String[] basePool() {
+        return mode == 0 ? baseOwn : baseHot;
+    }
+
+    String[] own() {
+        return own;
+    }
+
+    String[] hot() {
+        return hot;
+    }
+
+    int currentIndex() {
+        return currentIndex;
+    }
+
+    void setCurrentIndex(int idx) {
+        currentIndex = idx;
     }
 
     SharedPreferences prefs() {
@@ -1834,7 +860,7 @@ public class MainActivity extends Activity {
         renderIndex(currentIndex);
     }
 
-    private void showActions() {
+    void showActions() {
         final int idx = currentIndex;
         boolean fav = favSet().contains(idx);
         String[] labels = new String[]{"复制", fav ? "取消收藏" : "收藏", "分享成图"};
@@ -1930,7 +956,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void showFavs() {
+    void showFavs() {
         final Set<Integer> set = favSet();
         final String[] pool = mode == 0 ? own : hot;
         if (set.isEmpty()) {
@@ -2019,7 +1045,7 @@ public class MainActivity extends Activity {
         return QuoteRepo.dayKey();
     }
 
-    private void showToday() {
+    void showToday() {
         String[] pool = mode == 0 ? own : hot;
         if (pool.length == 0) return;
         java.util.Calendar c = java.util.Calendar.getInstance();
@@ -2037,7 +1063,7 @@ public class MainActivity extends Activity {
         Dialogs.showComfort(this);
     }
 
-    private void showSettings() {
+    void showSettings() {
         Dialogs.showSettings(this);
     }
 
@@ -2053,7 +1079,7 @@ public class MainActivity extends Activity {
         recreate();
     }
 
-    private void showReview() {
+    void showReview() {
         Dialogs.showReview(this);
     }
 
@@ -2338,14 +1364,14 @@ public class MainActivity extends Activity {
         mode = prefs.getInt("mode", 0);
         countOwn = prefs.getInt("count_own", 0);
         countHot = prefs.getInt("count_hot", 0);
-        speakEnglish = prefs.getBoolean("speak_en", false);
-        textSizeLevel = prefs.getInt("text_size", 1);
-        lineLevel = prefs.getInt("line_space", 1);
+        ttsCtl.setSpeakEnglish(prefs.getBoolean("speak_en", false));
+        ttsCtl.setTextSizeLevel(prefs.getInt("text_size", 1));
+        ttsCtl.setLineLevel(prefs.getInt("line_space", 1));
         ensurePools(mode);
         rebuildPools();
         int len = (mode == 0 ? own : hot).length;
         currentIndex = Math.max(0, Math.min(currentIndex, Math.max(0, len - 1)));
-        applyTypography();
+        ttsCtl.applyTypography(this);
         refreshLabels();
         if (len > 0) renderIndex(currentIndex);
         checkCapsule();
@@ -2368,7 +1394,7 @@ public class MainActivity extends Activity {
         // 逻辑在 BackupIO，这里只留薄封装
     }
 
-    private void showIndex() {
+    void showIndex() {
         final String[] pool = mode == 0 ? own : hot;
         final String[] enPool = mode == 0 ? ownEn : hotEn;
         if (pool.length == 0) return;
